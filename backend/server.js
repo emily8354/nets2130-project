@@ -23,7 +23,6 @@ const users = {
     points: 120,
     streak: 3,
     lastActivityDate: '2024-05-09',
-    rewards: ['Water Bottle'],
   },
 };
 
@@ -50,13 +49,6 @@ const activities = [
     pointsEarned: 50,
     date: '2024-05-09',
   },
-];
-
-// Rewards catalog describing redemption thresholds
-const rewardsCatalog = [
-  { id: 'reward-1', name: 'Water Bottle', requiredPoints: 100 },
-  { id: 'reward-2', name: 'Kinnect Tee', requiredPoints: 300 },
-  { id: 'reward-3', name: 'Wellness Retreat', requiredPoints: 1000 },
 ];
 
 /**********************
@@ -92,14 +84,6 @@ function updateUserProgress(user, activityPoints, date) {
   user.lastActivityDate = date;
 
   user.points += activityPoints;
-
-  // Redeem any rewards automatically when thresholds are met
-  rewardsCatalog.forEach((reward) => {
-    const hasReward = user.rewards.includes(reward.name);
-    if (!hasReward && user.points >= reward.requiredPoints) {
-      user.rewards.push(reward.name);
-    }
-  });
 }
 
 function updateTeamProgress(teamId) {
@@ -160,7 +144,6 @@ app.post('/signup', (req, res) => {
     points: 0,
     streak: 0,
     lastActivityDate: null,
-    rewards: [],
   };
 
   updateTeamProgress(teamId);
@@ -228,32 +211,6 @@ app.get('/activity-map', (req, res) => {
     type: activity.type,
   }));
   res.json({ mapPoints });
-});
-
-/**********************
- * Rewards
- **********************/
-app.post('/redeem', (req, res) => {
-  const { username, rewardId } = req.body;
-  const user = users[username];
-  const reward = rewardsCatalog.find((item) => item.id === rewardId);
-  if (!user || !reward) {
-    return res.status(404).json({ error: 'User or reward not found' });
-  }
-
-  if (user.points < reward.requiredPoints) {
-    return res.status(400).json({ error: 'Not enough points' });
-  }
-
-  if (!user.rewards.includes(reward.name)) {
-    user.rewards.push(reward.name);
-  }
-
-  res.json({ message: 'Reward redeemed', rewards: user.rewards });
-});
-
-app.get('/rewards', (req, res) => {
-  res.json({ catalog: rewardsCatalog });
 });
 
 /**********************
