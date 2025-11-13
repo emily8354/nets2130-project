@@ -118,39 +118,6 @@ function ActivityMap({ mapPoints }) {
   );
 }
 
-function Rewards({ user, catalog, onRedeem }) {
-  const redeem = async (rewardId) => {
-    const response = await fetch(`${API_BASE}/redeem`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user.username, rewardId }),
-    });
-    const payload = await response.json();
-    onRedeem(payload);
-  };
-
-  return (
-    <div className="card">
-      <h3>Rewards</h3>
-      <p>Points: {user.points} · Streak: {user.streak} days</p>
-      <ul>
-        {catalog.map((reward) => {
-          const unlocked = user.points >= reward.requiredPoints;
-          const claimed = user.rewards.includes(reward.name);
-          return (
-            <li key={reward.id}>
-              <strong>{reward.name}</strong> — {reward.requiredPoints} pts
-              <button disabled={!unlocked} onClick={() => redeem(reward.id)}>
-                {claimed ? 'Claimed' : unlocked ? 'Redeem' : 'Locked'}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
 function Login({ onAuth }) {
   const [username, setUsername] = useState('alice');
   const [password, setPassword] = useState('pass123');
@@ -192,12 +159,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [leaderboard, setLeaderboard] = useState({ teamLeaderboard: [], cityLeaderboard: [], individualLeaderboard: [] });
   const [mapPoints, setMapPoints] = useState([]);
-  const [rewardsCatalog, setRewardsCatalog] = useState([]);
 
   useEffect(() => {
     fetch(`${API_BASE}/leaderboard`).then((res) => res.json()).then(setLeaderboard);
     fetch(`${API_BASE}/activity-map`).then((res) => res.json()).then((data) => setMapPoints(data.mapPoints));
-    fetch(`${API_BASE}/rewards`).then((res) => res.json()).then((data) => setRewardsCatalog(data.catalog));
   }, []);
 
   const refreshData = () => {
@@ -224,17 +189,6 @@ export default function App() {
       .then((data) => setUser(data.user));
   };
 
-  const handleRedeem = () => {
-    refreshData();
-    fetch(`${API_BASE}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user.username, password: user.password }),
-    })
-      .then((res) => res.json())
-      .then((data) => setUser(data.user));
-  };
-
   return (
     <main className="layout">
       <header>
@@ -245,7 +199,6 @@ export default function App() {
         <ActivityForm user={user} onLogged={handleActivityLogged} />
         <Leaderboard data={leaderboard} />
         <ActivityMap mapPoints={mapPoints} />
-        <Rewards user={user} catalog={rewardsCatalog} onRedeem={handleRedeem} />
       </section>
     </main>
   );
