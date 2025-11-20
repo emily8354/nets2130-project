@@ -41,7 +41,7 @@ const users = {
     username: 'alice',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 120,
     streak: 3,
     lastActivityDate: '2024-11-18',
@@ -50,17 +50,17 @@ const users = {
     status: 'online',
     lastSeen: Date.now(),
   },
-  // Penn students/faculty around Philadelphia
+  // Users around Philadelphia
   bob: {
     username: 'bob',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 95,
     streak: 2,
     lastActivityDate: '2024-11-17',
     lat: 39.9500,
-    lng: -75.1914, // Near Penn campus
+    lng: -75.1914,
     status: 'online',
     lastSeen: Date.now() - 300000, // 5 minutes ago
   },
@@ -68,12 +68,12 @@ const users = {
     username: 'charlie',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 150,
     streak: 5,
     lastActivityDate: '2024-11-18',
     lat: 39.9546,
-    lng: -75.1930, // Near Penn campus
+    lng: -75.1930,
     status: 'active',
     lastSeen: Date.now() - 120000, // 2 minutes ago
   },
@@ -81,7 +81,7 @@ const users = {
     username: 'diana',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 200,
     streak: 7,
     lastActivityDate: '2024-11-18',
@@ -94,7 +94,7 @@ const users = {
     username: 'eve',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 175,
     streak: 4,
     lastActivityDate: '2024-11-17',
@@ -107,7 +107,7 @@ const users = {
     username: 'frank',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 110,
     streak: 3,
     lastActivityDate: '2024-11-18',
@@ -120,7 +120,7 @@ const users = {
     username: 'grace',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 140,
     streak: 6,
     lastActivityDate: '2024-11-17',
@@ -133,7 +133,7 @@ const users = {
     username: 'henry',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 185,
     streak: 8,
     lastActivityDate: '2024-11-18',
@@ -146,7 +146,7 @@ const users = {
     username: 'iris',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 165,
     streak: 5,
     lastActivityDate: '2024-11-18',
@@ -159,7 +159,7 @@ const users = {
     username: 'jack',
     password: 'pass123',
     city: 'Philadelphia',
-    teamId: 'team-penn',
+    teamId: 'team-alpha',
     points: 130,
     streak: 4,
     lastActivityDate: '2024-11-17',
@@ -172,9 +172,9 @@ const users = {
 
 // Teams hold aggregated totals derived from their members' activities
 const teams = {
-  'team-penn': {
-    id: 'team-penn',
-    name: 'Penn Quakers',
+  'team-alpha': {
+    id: 'team-alpha',
+    name: 'Team Alpha',
     city: 'Philadelphia',
     totalPoints: 1195,
     totalActivities: 45,
@@ -303,7 +303,7 @@ function getCityCoordinates(city) {
     'Miami': { lat: 25.7617, lng: -80.1918 },
     'Austin': { lat: 30.2672, lng: -97.7431 },
   };
-  return cityMap[city] || { lat: 39.9526, lng: -75.1652 }; // Default to Philadelphia/Penn
+  return cityMap[city] || { lat: 39.9526, lng: -75.1652 }; // Default coordinates
 }
 
 function calculatePoints(activity) {
@@ -379,9 +379,9 @@ app.post('/signup', (req, res) => {
     return res.status(409).json({ error: 'User already exists' });
   }
 
-  const teamId = Object.keys(teams).find((id) => teams[id].name === teamName) || 'team-penn';
+  const teamId = Object.keys(teams).find((id) => teams[id].name === teamName) || 'team-alpha';
   if (!teams[teamId]) {
-    teams[teamId] = { id: teamId, name: teamName || 'Penn Quakers', city: city || 'Philadelphia', totalPoints: 0, totalActivities: 0 };
+    teams[teamId] = { id: teamId, name: teamName || 'Team Alpha', city: city || 'Philadelphia', totalPoints: 0, totalActivities: 0 };
   }
 
   // Get city coordinates if known
@@ -458,7 +458,7 @@ app.get('/activity-map', (req, res) => {
   // Return activity points with user locations
   const mapPoints = activities.map((activity, index) => {
     const user = users[activity.username];
-    // Default to Philadelphia/Penn coordinates if user location not found
+      // Default coordinates if user location not found
     return {
       id: `map-${index}`,
       username: activity.username,

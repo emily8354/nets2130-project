@@ -1,10 +1,11 @@
 body {
   font-family: 'Inter', sans-serif;
-  background: #f5f8fb !important;
+  background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%) !important; /* Deep purple to dark indigo */
   margin: 0;
-  color: #1f2937 !important;
+  color: #f8fafc !important;
   display: block !important;
   place-items: normal !important;
+  min-height: 100vh;
 }
 
 .layout {
@@ -21,6 +22,7 @@ header {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
+  color: #f8fafc;
 }
 
 .grid {
@@ -33,13 +35,16 @@ header {
 }
 
 .card {
-  background: white;
+  background: rgba(30, 27, 75, 0.8); /* Dark purple with transparency */
   border-radius: 16px;
   padding: 1.25rem;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #f8fafc;
+  backdrop-filter: blur(10px);
 }
 
 label {
@@ -47,19 +52,28 @@ label {
   flex-direction: column;
   gap: 0.25rem;
   font-weight: 500;
+  color: #f8fafc;
 }
 
 input,
-select,
-button {
+select {
   font: inherit;
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
-  border: 1px solid #cbd5f5;
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
 }
 
 button {
-  background: #990000; /* Penn Red */
+  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%); /* Purple to Cyan gradient */
   color: white;
   border: none;
   cursor: pointer;
@@ -68,8 +82,8 @@ button {
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(153, 0, 0, 0.35);
-  background: #b30000; /* Lighter Penn Red on hover */
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.4);
+  background: linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%); /* Lighter gradient on hover */
 }
 
 button:disabled {
@@ -146,14 +160,14 @@ button:disabled {
 
 .small {
   font-size: 0.85rem;
-  color: #475569;
+  color: #cbd5e1;
 }
 
 /* Streaks and Badges Styles */
 .streak-display {
   text-align: center;
   padding: 1rem;
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
   border-radius: 12px;
   margin-bottom: 1rem;
 }
@@ -185,7 +199,7 @@ button:disabled {
 .badges-section h4 {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #475569;
+  color: #e2e8f0;
   margin-bottom: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -208,20 +222,21 @@ button:disabled {
 }
 
 .badge.earned {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border-color: #f59e0b;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+  background: linear-gradient(135deg, #e9d5ff 0%, #a5f3fc 100%);
+  border-color: #8b5cf6;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .badge.locked {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(139, 92, 246, 0.3);
   opacity: 0.6;
+  color: #94a3b8;
 }
 
 .badge.earned:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
 }
 
 .badge-icon {
@@ -234,12 +249,12 @@ button:disabled {
   font-weight: 600;
   text-align: center;
   margin-bottom: 0.25rem;
-  color: #1f2937;
+  color: #f8fafc;
 }
 
 .badge-requirement {
   font-size: 0.65rem;
-  color: #64748b;
+  color: #cbd5e1;
   text-align: center;
 }
 
@@ -255,8 +270,9 @@ button:disabled {
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background: #f8fafc;
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .athlete-avatar {
@@ -270,12 +286,12 @@ button:disabled {
 .athlete-details h4 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1f2937;
+  color: #f8fafc;
 }
 
 .athlete-details .small {
   margin: 0.25rem 0 0 0;
-  color: #64748b;
+  color: #cbd5e1;
 }
 
 .warning {
@@ -338,10 +354,11 @@ button:disabled {
 
 .activity-item {
   padding: 1rem;
-  background: #f8fafc;
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 8px;
-  border-left: 4px solid #fc4c02;
+  border-left: 4px solid #06b6d4;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .activity-item:hover {
@@ -363,13 +380,13 @@ button:disabled {
 .activity-info h4 {
   margin: 0;
   font-size: 1rem;
-  color: #1f2937;
+  color: #f8fafc;
   font-weight: 600;
 }
 
 .activity-info .small {
   margin: 0.25rem 0 0 0;
-  color: #64748b;
+  color: #cbd5e1;
 }
 
 .activity-stats {
@@ -386,7 +403,7 @@ button:disabled {
 
 .stat-label {
   font-size: 0.75rem;
-  color: #64748b;
+  color: #cbd5e1;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -394,15 +411,15 @@ button:disabled {
 .stat-value {
   font-size: 1rem;
   font-weight: 600;
-  color: #1f2937;
+  color: #f8fafc;
 }
 
 .load-more-btn {
   margin-top: 1rem;
   width: 100%;
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+  background: rgba(15, 23, 42, 0.6);
+  color: #f8fafc;
+  border: 1px solid rgba(139, 92, 246, 0.5);
   padding: 0.75rem;
   border-radius: 8px;
   font-weight: 500;
@@ -411,7 +428,8 @@ button:disabled {
 }
 
 .load-more-btn:hover:not(:disabled) {
-  background: #e2e8f0;
+  background: rgba(139, 92, 246, 0.3);
+  border-color: #8b5cf6;
 }
 
 .load-more-btn:disabled {
@@ -420,11 +438,12 @@ button:disabled {
 }
 
 .error {
-  color: #ef4444;
+  color: #fca5a5;
   padding: 0.75rem;
-  background: #fef2f2;
+  background: rgba(127, 29, 29, 0.3);
   border-radius: 6px;
   border-left: 4px solid #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.5);
 }
 
 /* Google Maps Info Window Styles */

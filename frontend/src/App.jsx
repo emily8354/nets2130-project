@@ -150,7 +150,7 @@ function ActivityMap({ mapPoints, teamMembers }) {
     }
   };
 
-  // Calculate center from user locations if available, default to Philadelphia/Penn
+  // Calculate center from user locations if available, default to center coordinates
   const mapCenter = useMemo(() => {
     if (teamMembers && teamMembers.length > 0) {
       const avgLat = teamMembers.reduce((sum, m) => sum + m.lat, 0) / teamMembers.length;
@@ -162,15 +162,15 @@ function ActivityMap({ mapPoints, teamMembers }) {
       const avgLng = mapPoints.reduce((sum, p) => sum + p.lng, 0) / mapPoints.length;
       return [avgLat, avgLng];
     }
-    return [39.9526, -75.1652]; // Philadelphia / Penn campus
+    return [39.9526, -75.1652]; // Default center
   }, [teamMembers, mapPoints]);
 
   // Initialize map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Create map centered on Philadelphia/Penn - always start with Philadelphia coordinates
-    const initialCenter = [39.9526, -75.1652]; // Philadelphia / Penn campus
+    // Create map with default center
+    const initialCenter = [39.9526, -75.1652]; // Default center
     const initialZoom = 13; // Good zoom level for campus area
     const map = L.map(mapContainerRef.current).setView(initialCenter, initialZoom);
     mapInstanceRef.current = map;
@@ -224,11 +224,11 @@ function ActivityMap({ mapPoints, teamMembers }) {
           maxZoom: 17,
           max: 1.0,
           gradient: {
-            0.0: 'blue',
-            0.5: 'cyan',
-            0.7: 'lime',
-            0.85: 'yellow',
-            1.0: 'red'
+            0.0: '#8b5cf6',  // Purple
+            0.3: '#a78bfa',  // Light purple
+            0.5: '#06b6d4',  // Cyan
+            0.7: '#22d3ee',  // Light cyan
+            1.0: '#67e8f9'   // Bright cyan
           }
         });
         heatLayer.addTo(mapInstanceRef.current);
@@ -300,9 +300,9 @@ function ActivityMap({ mapPoints, teamMembers }) {
 
   return (
     <div className="card map-card">
-      <h3>Live Activity Map - Penn Campus</h3>
+      <h3>Live Activity Map</h3>
       <p className="small">
-        Heat map showing today's activities around Philadelphia & Penn campus. Quaker team members marked with status: 
+        Heat map showing today's activities. Team members marked with status: 
         <span style={{ color: '#10b981' }}> 🟢 Active</span>, 
         <span style={{ color: '#3b82f6' }}> 🔵 Online</span>, 
         <span style={{ color: '#6b7280' }}> ⚫ Offline</span>
@@ -317,13 +317,13 @@ function ActivityMap({ mapPoints, teamMembers }) {
         }}
       />
       {selectedMember && (
-        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f3f4f6', borderRadius: '8px' }}>
-          <h4>{selectedMember.username}</h4>
-          <p><strong>Status:</strong> {getStatusIcon(selectedMember.status)} {selectedMember.status}</p>
-          <p><strong>City:</strong> {selectedMember.city}</p>
-          <p><strong>Points:</strong> {selectedMember.points} pts</p>
-          <p><strong>Streak:</strong> {selectedMember.streak} days 🔥</p>
-          <p><strong>Team:</strong> {selectedMember.teamId}</p>
+        <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#f8fafc' }}>
+          <h4 style={{ color: '#f8fafc' }}>{selectedMember.username}</h4>
+          <p style={{ color: '#cbd5e1' }}><strong>Status:</strong> {getStatusIcon(selectedMember.status)} {selectedMember.status}</p>
+          <p style={{ color: '#cbd5e1' }}><strong>City:</strong> {selectedMember.city}</p>
+          <p style={{ color: '#cbd5e1' }}><strong>Points:</strong> {selectedMember.points} pts</p>
+          <p style={{ color: '#cbd5e1' }}><strong>Streak:</strong> {selectedMember.streak} days 🔥</p>
+          <p style={{ color: '#cbd5e1' }}><strong>Team:</strong> {selectedMember.teamId}</p>
           <button onClick={() => setSelectedMember(null)} style={{ marginTop: '0.5rem' }}>Close</button>
         </div>
       )}
@@ -420,7 +420,7 @@ function Login({ onAuth }) {
     const response = await fetch(`${API_BASE}/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, city: 'Philadelphia', teamName: 'Penn Quakers' }),
+      body: JSON.stringify({ username, password, city: 'Philadelphia', teamName: 'Team Alpha' }),
     });
     const payload = await response.json();
     if (payload.user) {
@@ -432,7 +432,7 @@ function Login({ onAuth }) {
 
   return (
     <div className="card">
-      <h3 style={{ color: '#990000' }}>Kinnect @ Penn Login</h3>
+      <h3 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', textAlign: 'center' }}>Login</h3>
       <label>
         Username
         <input value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -506,6 +506,9 @@ export default function App() {
   if (!user) {
     return (
       <main className="layout">
+        <header style={{ marginBottom: '2rem' }}>
+          <h1 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Kinnect</h1>
+        </header>
         <Login onAuth={setUser} />
       </main>
     );
@@ -529,8 +532,8 @@ export default function App() {
   return (
     <main className="layout">
       <header>
-        <h1 style={{ color: '#990000' }}>Kinnect @ Penn</h1>
-        <p>Welcome back, {user.username}! Keep the streak alive, Quaker! 🔵🔴</p>
+        <h1 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Kinnect</h1>
+        <p>Welcome back, {user.username}! Keep the streak alive! 🔥</p>
       </header>
       <section className="grid">
         <ActivityForm user={user} onLogged={handleActivityLogged} />
