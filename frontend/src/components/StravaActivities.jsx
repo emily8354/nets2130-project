@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const API_BASE = 'http://localhost:4000';
 
-function StravaActivities({ user }) {
+function StravaActivities({ user, unit = 'km' }) {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -74,6 +74,12 @@ function StravaActivities({ user }) {
   };
 
   const formatDistance = (meters) => {
+    if (unit === 'mi') {
+      const miles = meters / 1609.344;
+      if (miles >= 1) return `${miles.toFixed(2)} mi`;
+      return `${(miles * 5280).toFixed(0)} ft`;
+    }
+    // default: kilometers
     if (meters >= 1000) {
       return `${(meters / 1000).toFixed(2)} km`;
     }

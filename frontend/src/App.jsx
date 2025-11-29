@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
 import './App.css';
-import StravaConnection from './components/StravaConnection';
+import Navbar from './components/Navbar';
+import LogActivityModal from './components/LogActivityModal';
+import StravaBanner from './components/StravaBanner';
 import StravaActivities from './components/StravaActivities';
+import Profile from './pages/Profile';
 
 // Fix Leaflet default icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -20,61 +24,7 @@ L.Icon.Default.mergeOptions({
  */
 const API_BASE = 'http://localhost:4000';
 
-const defaultActivity = { type: 'run', distanceKm: 5, durationMinutes: 30 };
-
-function ActivityForm({ user, onLogged }) {
-  const [activity, setActivity] = useState(defaultActivity);
-
-  const updateField = (field, value) => setActivity((prev) => ({ ...prev, [field]: value }));
-
-  const submit = async (event) => {
-    event.preventDefault();
-    const response = await fetch(`${API_BASE}/activities`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user.username, ...activity }),
-    });
-    const payload = await response.json();
-    onLogged(payload);
-  };
-
-  return (
-    <form className="card" onSubmit={submit}>
-      <h3>Log Activity</h3>
-      <label>
-        Type
-        <select value={activity.type} onChange={(e) => updateField('type', e.target.value)}>
-          <option value="run">Run</option>
-          <option value="walk">Walk</option>
-          <option value="workout">Workout</option>
-        </select>
-      </label>
-      {activity.type !== 'workout' && (
-        <label>
-          Distance (km)
-          <input
-            type="number"
-            min="0"
-            value={activity.distanceKm}
-            onChange={(e) => updateField('distanceKm', Number(e.target.value))}
-          />
-        </label>
-      )}
-      {activity.type === 'workout' && (
-        <label>
-          Duration (minutes)
-          <input
-            type="number"
-            min="0"
-            value={activity.durationMinutes}
-            onChange={(e) => updateField('durationMinutes', Number(e.target.value))}
-          />
-        </label>
-      )}
-      <button type="submit">Add Activity</button>
-    </form>
-  );
-}
+// ActivityForm removed - now in LogActivityModal component
 
 function Leaderboard({ data }) {
   return (
@@ -451,10 +401,18 @@ function Login({ onAuth }) {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [unit, setUnit] = useState(() => {
+    try {
+      return localStorage.getItem('distanceUnit') || 'km';
+    } catch (e) {
+      return 'km';
+    }
+  });
   const [leaderboard, setLeaderboard] = useState({ teamLeaderboard: [], cityLeaderboard: [], individualLeaderboard: [] });
   const [mapPoints, setMapPoints] = useState([]);
   const [stravaConnected, setStravaConnected] = useState(false);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Handle Strava OAuth callback
   useEffect(() => {
@@ -492,6 +450,37 @@ export default function App() {
       });
   }, [user]);
 
+  // Keep track of whether this user has a Strava connection
+  useEffect(() => {
+    if (!user) return;
+    fetch(`${API_BASE}/api/strava/status?username=${user.username}`)
+      .then((res) => res.json())
+      .then((status) => {
+        setStravaConnected(Boolean(status.connected));
+      })
+      .catch((err) => {
+        console.error('Error fetching Strava status:', err);
+      });
+  }, [user]);
+
+  const handleUnitChange = (nextUnit) => {
+    setUnit(nextUnit);
+    try {
+      localStorage.setItem('distanceUnit', nextUnit);
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleLogout = () => {
+    // clear frontend state and preferences
+    setUser(null);
+    try {
+      // keep unit persisted unless user wants it cleared; we'll keep it
+    } catch (e) {}
+    // Optionally: redirect handled by Router since login view shows when no user
+  };
+
   const refreshData = () => {
     if (!user) return;
     
@@ -505,8 +494,8 @@ export default function App() {
 
   if (!user) {
     return (
-      <main className="layout">
-        <header style={{ marginBottom: '2rem' }}>
+      <main className="layout login-layout">
+        <header className="login-header">
           <h1 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Kinnect</h1>
         </header>
         <Login onAuth={setUser} />
@@ -529,20 +518,73 @@ export default function App() {
     setStravaConnected((prev) => !prev);
   };
 
+  // Calculate quick stats (dummy data for now - can be enhanced with real data)
+  const quickStats = {
+    weekDistance: '12 km', // This would come from actual activity data
+    currentStreak: user.streak || 3,
+    badges: 4, // This would be calculated from earned badges
+  };
+
   return (
-    <main className="layout">
-      <header>
-        <h1 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Kinnect</h1>
-        <p>Welcome back, {user.username}! Keep the streak alive! 🔥</p>
-      </header>
-      <section className="grid">
-        <ActivityForm user={user} onLogged={handleActivityLogged} />
-        <StravaConnection user={user} onConnectionChange={handleStravaConnectionChange} />
-        <StravaActivities user={user} />
-        <StreaksAndBadges user={user} />
-        <Leaderboard data={leaderboard} />
-        <ActivityMap mapPoints={mapPoints} teamMembers={teamMembers} />
-      </section>
-    </main>
+    <BrowserRouter>
+      <main className="layout">
+        <Navbar user={user} onLogActivityClick={() => setIsModalOpen(true)} />
+
+        <Routes>
+          <Route path="/profile" element={<Profile user={user} onLogout={handleLogout} onUnitChange={handleUnitChange} unit={unit} stravaConnected={stravaConnected} onConnectionChange={handleStravaConnectionChange} />} />
+          <Route
+            path="/"
+            element={(
+              <div className="dashboard-container">
+                {/* Hero Section */}
+                <section className="hero-section">
+                  <h2 className="hero-welcome">
+                    Welcome back, {user.username}!
+                  </h2>
+                  <div className="quick-stats">
+                    <div className="stat-pill">
+                      This week: {quickStats.weekDistance}
+                    </div>
+                    <div className="stat-pill">
+                      Current streak: {quickStats.currentStreak} days
+                    </div>
+                    <div className="stat-pill">
+                      Badges: {quickStats.badges}
+                    </div>
+                  </div>
+                </section>
+
+                {/* Strava Banner */}
+                <StravaBanner user={user} onConnectionChange={handleStravaConnectionChange} />
+
+                {/* Two Column Layout */}
+                <div className="dashboard-grid">
+                  {/* Left Column */}
+                  <div className="dashboard-left">
+                    {/* Streaks & Badges above the Activity Map */}
+                    <StreaksAndBadges user={user} />
+                    <ActivityMap mapPoints={mapPoints} teamMembers={teamMembers} />
+                  </div>
+
+                  {/* Right Column (swapped: StravaActivities above Leaderboard) */}
+                  <div className="dashboard-right">
+                    <StravaActivities user={user} unit={unit} />
+                    <Leaderboard data={leaderboard} />
+                  </div>
+                </div>
+              </div>
+            )}
+          />
+        </Routes>
+
+        {/* Log Activity Modal */}
+        <LogActivityModal
+          user={user}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onLogged={handleActivityLogged}
+        />
+      </main>
+    </BrowserRouter>
   );
 }

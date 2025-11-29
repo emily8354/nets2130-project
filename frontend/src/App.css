@@ -10,11 +10,386 @@ body {
 
 .layout {
   min-height: 100vh;
-  padding: 2rem;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+/* Navbar Styles */
+.navbar {
+  background: rgba(30, 27, 75, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 1rem 2rem;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-logo {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.navbar-center {
+  display: flex;
   gap: 1.5rem;
+  align-items: center;
+}
+
+.nav-link {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+  padding: 0.5rem 0;
+}
+
+.nav-link:hover {
+  color: #f8fafc;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.streak-chip {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+  color: white;
+  border: none;
+  padding: 0.625rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  font-size: 0.875rem;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.4);
+  background: linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%);
+}
+
+.btn-secondary {
+  background: rgba(15, 23, 42, 0.6);
+  color: #f8fafc;
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  padding: 0.625rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #8b5cf6;
+}
+
+/* Dashboard Container */
+.dashboard-container {
+  /* Slightly narrower container so the two-column layout fits comfortably
+     on smaller/laptop-sized screens and appears centered. */
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Hero Section */
+.hero-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem 0;
+}
+
+.hero-welcome {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 1rem 0;
+}
+
+.quick-stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.stat-pill {
+  background: rgba(30, 27, 75, 0.8);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 20px;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #f8fafc;
+}
+
+/* Strava Banner */
+.strava-banner {
+  background: rgba(30, 27, 75, 0.9);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 20px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.2);
+}
+
+.strava-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.strava-banner-content p {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 0.875rem;
+}
+
+.strava-banner-close {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  line-height: 1;
+}
+
+.strava-banner-close:hover {
+  color: #f8fafc;
+}
+
+/* Dashboard Grid - Two Column Layout */
+.dashboard-grid {
+  display: grid;
+  /* Use a flexible left column and a fixed-width right column so the
+     map (left) can't grow past the available area and push/overlap the
+     right column. minmax(0, 1fr) is important to allow children to
+     shrink below their content width. */
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.dashboard-left,
+.dashboard-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0; /* allow children to shrink properly inside grid */
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modal-content {
+  background: rgba(30, 27, 75, 0.95);
+  border-radius: 20px;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #f8fafc;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid rgba(139, 92, 246, 0.3);
+  justify-content: flex-end;
+}
+
+.modal-footer button {
+  min-width: 100px;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-left,
+  .dashboard-right {
+    order: initial;
+  }
+
+  /* Mobile order: Hero → Live Activity → Streaks & Badges → Strava Activities → Leaderboards */
+  .dashboard-left {
+    order: 1;
+  }
+
+  .dashboard-right {
+    order: 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .navbar-center {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: 0.5rem;
+    gap: 1rem;
+  }
+
+  .navbar-right {
+    gap: 0.75rem;
+  }
+
+  .streak-chip {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+  }
+
+  .btn-primary {
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .dashboard-container {
+    padding: 1rem;
+  }
+
+  .hero-welcome {
+    font-size: 1.5rem;
+  }
+
+  .stat-pill {
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .strava-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .strava-banner-content {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .modal-content {
+    margin: 1rem;
+    max-width: calc(100% - 2rem);
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
 }
 
 header {
@@ -23,6 +398,18 @@ header {
   max-width: 1100px;
   margin: 0 auto;
   color: #f8fafc;
+}
+
+/* Login Layout */
+.login-layout {
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.login-header {
+  margin-bottom: 2rem;
+  text-align: center;
 }
 
 .grid {
@@ -36,7 +423,7 @@ header {
 
 .card {
   background: rgba(30, 27, 75, 0.8); /* Dark purple with transparency */
-  border-radius: 16px;
+  border-radius: 20px; /* Updated to 18-22px range */
   padding: 1.25rem;
   box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
   display: flex;
@@ -72,21 +459,24 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
 }
 
-button {
+button:not(.btn-primary):not(.btn-secondary):not(.modal-close):not(.strava-banner-close) {
   background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%); /* Purple to Cyan gradient */
   color: white;
   border: none;
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
+  padding: 0.625rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 500;
 }
 
-button:hover:not(:disabled) {
+button:not(.btn-primary):not(.btn-secondary):not(.modal-close):not(.strava-banner-close):hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(139, 92, 246, 0.4);
   background: linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%); /* Lighter gradient on hover */
 }
 
-button:disabled {
+button:not(.btn-primary):not(.btn-secondary):not(.modal-close):not(.strava-banner-close):disabled {
   background: #d1d5db;
   cursor: not-allowed;
 }
@@ -97,7 +487,10 @@ button:disabled {
 }
 
 .map-card {
-  grid-column: 1 / -1;
+  /* Ensure the map card fits its column and does not overflow. */
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .map {
@@ -107,6 +500,14 @@ button:disabled {
   min-height: 400px;
   overflow: hidden;
   box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.15);
+}
+
+/* Ensure any inner map containers respect the card width */
+.map-card > div,
+.map-card .leaflet-container {
+  max-width: 100%;
+  width: 100% !important;
+  box-sizing: border-box;
 }
 
 .map-background {
@@ -168,7 +569,7 @@ button:disabled {
   text-align: center;
   padding: 1rem;
   background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
-  border-radius: 12px;
+  border-radius: 18px;
   margin-bottom: 1rem;
 }
 
@@ -475,6 +876,5 @@ button:disabled {
 }
 
 .map-card {
-  grid-column: 1 / -1;
   overflow: visible;
 }
