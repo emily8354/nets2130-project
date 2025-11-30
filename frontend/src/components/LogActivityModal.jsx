@@ -88,7 +88,7 @@ function LogActivityModal({ user, isOpen, onClose, onLogged }) {
                 </label>
                 <label style={{ flex: 1, maxWidth: 120 }}>
                   Unit
-                  <select style={{ marginRight: 1 }} value={activity.distanceUnit} onChange={(e) => updateField('distanceUnit', e.target.value)}>
+                  <select value={activity.distanceUnit} onChange={(e) => updateField('distanceUnit', e.target.value)}>
                     <option value="km">km</option>
                     <option value="mi">mi</option>
                   </select>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 const API_BASE = 'http://localhost:4000';
 
@@ -9,7 +10,17 @@ export default function Profile({ user, onLogout, onUnitChange, unit, stravaConn
     if (!confirm('Disconnect your Strava account?')) return;
     setDisconnecting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/strava/disconnect?username=${user.username}`);
+      const idParam = user?.id ? `userId=${user.id}` : `username=${encodeURIComponent(user.username)}`;
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const res = await fetch(`${API_BASE}/api/strava/disconnect?${idParam}`, { headers });
       if (res.ok) {
         alert('Strava disconnected');
         if (onConnectionChange) onConnectionChange();
@@ -37,7 +48,17 @@ export default function Profile({ user, onLogout, onUnitChange, unit, stravaConn
   const handleConnectStrava = async () => {
     // Initiate the OAuth flow via backend; backend returns an authUrl to redirect to
     try {
-      const res = await fetch(`${API_BASE}/api/strava/auth?username=${user.username}`);
+      let headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const idParam = user?.id ? `userId=${user.id}` : `username=${user.username}`;
+      const res = await fetch(`${API_BASE}/api/strava/auth?${idParam}`, { headers });
       const data = await res.json();
       if (data.authUrl) {
         // Redirect browser to Strava auth

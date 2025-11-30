@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 const API_BASE = 'http://localhost:4000';
 
@@ -16,7 +17,17 @@ function StravaConnection({ user, onConnectionChange }) {
 
   const fetchConnectionStatus = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/strava/status?username=${user.username}`);
+      const idParam = user?.id ? `userId=${user.id}` : `username=${encodeURIComponent(user.username)}`;
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const response = await fetch(`${API_BASE}/api/strava/status?${idParam}`, { headers });
       const status = await response.json();
       setConnectionStatus(status);
 
@@ -33,7 +44,17 @@ function StravaConnection({ user, onConnectionChange }) {
 
   const fetchAthleteProfile = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/strava/athlete?username=${user.username}`);
+      const idParam = user?.id ? `userId=${user.id}` : `username=${encodeURIComponent(user.username)}`;
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const response = await fetch(`${API_BASE}/api/strava/athlete?${idParam}`, { headers });
       if (response.ok) {
         const athleteData = await response.json();
         setAthlete(athleteData);
@@ -48,7 +69,18 @@ function StravaConnection({ user, onConnectionChange }) {
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      const response = await fetch(`${API_BASE}/api/strava/auth?username=${user.username}`);
+      // If the user is authenticated via Supabase, include the access token so the server
+      // can associate the Strava state with the Supabase user id (preferred).
+      let headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore - proceed without token (legacy username flow)
+      }
+
+      const response = await fetch(`${API_BASE}/api/strava/auth?username=${user.username}`, { headers });
       const data = await response.json();
       if (data.authUrl) {
         // Redirect to Strava authorization
@@ -67,7 +99,17 @@ function StravaConnection({ user, onConnectionChange }) {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/strava/disconnect?username=${user.username}`);
+      const idParam = user?.id ? `userId=${user.id}` : `username=${encodeURIComponent(user.username)}`;
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const response = await fetch(`${API_BASE}/api/strava/disconnect?${idParam}`, { headers });
       if (response.ok) {
         setConnectionStatus({ connected: false });
         setAthlete(null);

@@ -643,11 +643,18 @@ header {
   align-items: center;
 }
 
+/* Slightly smaller Kinnect title on the login/signup screens */
+.login-brand h1 {
+  font-size: 2.5rem; /* a little smaller than default */
+  font-weight: 700;
+  margin: 0;
+}
+
 .app-icon.large.below-title {
-  width: 72px;
-  height: 72px;
-  margin-bottom: 0.125rem; /* tighten the bottom spacing for closer visual grouping */
-  margin-top: 0rem;
+  width: 50px;
+  height: 50px;
+  margin-bottom: 0rem; /* tighten the bottom spacing for closer visual grouping */
+  margin-top: 0.125rem;
 }
 
 @media (max-width: 480px) {
@@ -655,7 +662,7 @@ header {
   .app-icon.large.below-title {
     width: 56px;
     height: 56px;
-    margin-bottom: 0.0625rem; /* tiny bottom gap on small screens */
+    margin-bottom: 0rem; /* tiny bottom gap on small screens */
     margin-top: 0rem;
   }
 }
@@ -667,8 +674,9 @@ header {
 }
 
 .login-header {
-  margin-bottom: 0.5rem; 
+  margin-bottom: 0rem; 
   text-align: center;
+  margin-top: 2rem;
 }
 
 .grid {
@@ -683,11 +691,11 @@ header {
 .card {
   background: rgba(30, 27, 75, 0.8); /* Dark purple with transparency */
   border-radius: 20px; /* Updated to 18-22px range */
-  padding: 1.25rem;
+  padding: 1.5rem;
   box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.9rem;
   border: 1px solid rgba(139, 92, 246, 0.4);
   color: #f8fafc;
   backdrop-filter: blur(10px);
@@ -742,7 +750,87 @@ button:not(.btn-primary):not(.btn-secondary):not(.modal-close):not(.strava-banne
 
 .button-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: center; /* center primary action buttons for auth */
+  gap: 0.75rem;
+}
+
+/* Auth-specific container tweaks so the login/signup card is wider and centered */
+.auth-wrapper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  padding: 2.25rem 1rem 3rem 1rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 520px; /* wider card to match screenshots */
+  box-sizing: border-box;
+}
+
+/* OAuth / Google button styling */
+.oauth-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  border-radius: 9999px; /* pill */
+  background: transparent; /* no background per request */
+  color: #f8fafc; /* light text to contrast with dark background */
+  border: 1px solid rgba(255,255,255,0.06);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+  width: 100%;
+  max-width: 420px;
+  margin: 0.5rem auto; /* center */
+}
+
+.oauth-button:hover {
+  box-shadow: 0 6px 18px rgba(16,24,40,0.08);
+}
+
+/* Stronger override to prevent outer generic button rules from applying a gradient */
+.auth-card button.oauth-button,
+button.oauth-button {
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  color: #f8fafc !important;
+  border: 2px solid rgba(255,255,255,0.06) !important;
+  box-shadow: none !important;
+}
+
+/* Small Google "G" logo on the left of the button (inline SVG) */
+.oauth-button::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><defs/><path fill='%23EA4335' d='M24 9.5c3.9 0 7 1.5 9.1 2.8l6.7-6.7C36.7 2 30.8 0 24 0 14.7 0 6.8 4.9 3.1 12.3l7.8 6C12.8 14 17.9 9.5 24 9.5z'/><path fill='%234285F4' d='M46.5 24.5c0-1.6-.1-3.1-.5-4.5H24v8.5h12.8c-.6 3.3-2.6 6.1-5.5 7.9l8.5 6.6c4.9-4.5 7.7-11.3 7.7-18.5z'/><path fill='%23FBBC05' d='M10.9 28.3A14.8 14.8 0 0110 24c0-1.3.2-2.6.5-3.8L3.1 14.3A23.9 23.9 0 000 24c0 3.9.9 7.6 2.6 10.9l8.3-6.6z'/><path fill='%2327AE60' d='M24 48c6.6 0 12.2-2.2 16.3-6l-8.5-6.6c-2.6 1.7-5.9 2.7-9 2.7-6.1 0-11.3-4.5-13.1-10.6l-8.3 6.6C6.8 43.1 14.7 48 24 48z'/></svg>");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  margin-left: 6px;
+}
+
+/* Make standard buttons inside auth card take the full width when centered */
+.auth-card .oauth-button {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Make the email/password primary buttons narrower than the OAuth button */
+.auth-card button:not(.oauth-button),
+.auth-card .btn-primary,
+.auth-card .btn-secondary {
+  width: 40%;
+  max-width: 400px; /* narrower buttons for Sign in / Create account */
+  margin: 0.25rem auto;
+  padding: 1rem 1.5rem;
 }
 
 .map-card {

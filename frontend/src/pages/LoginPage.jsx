@@ -1,0 +1,78 @@
+import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
+import { Link } from 'react-router-dom';
+
+const API_BASE = 'http://localhost:4000';
+
+export default function LoginPage({ onAuth }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const fetchProfileAndSetUser = async (accessToken) => {
+    const resp = await fetch(`${API_BASE}/api/profiles/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const payload = await resp.json();
+    const supaUser = payload.user;
+    const profile = payload.profile || {};
+    const clientUser = {
+      id: supaUser?.id,
+      email: supaUser?.email,
+      username: profile.display_name || (supaUser?.email ? supaUser.email.split('@')[0] : 'user'),
+      teamId: profile.team_id || null,
+      city: profile.city || null,
+      units: profile.units || 'km',
+      points: 0,
+      streak: 0,
+      password: null,
+    };
+    onAuth(clientUser);
+  };
+
+  const handleEmailLogin = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) return alert(error.message || 'Login failed');
+    const accessToken = data.session?.access_token;
+    if (accessToken) await fetchProfileAndSetUser(accessToken);
+  };
+
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+    if (error) alert(error.message || 'Google sign-in failed');
+  };
+
+  return (
+    <div className="auth-wrapper">
+      <div className="auth-card card">
+      <h3 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #2EEAC3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', textAlign: 'center' }}>Welcome back!</h3>
+
+      <label>
+        Email
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+      </label>
+
+      <label>
+        Password
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" />
+      </label>
+
+      <div className="button-row">
+        <button onClick={handleEmailLogin} disabled={loading}>Sign in</button>
+      </div>
+
+      <div style={{ textAlign: 'center' }}>
+        <button onClick={handleGoogleLogin} className="oauth-button">Continue with Google</button>
+      </div>
+
+      {/* Phone SMS OTP removed per request - using only email/password and Google OAuth */}
+
+      <p style={{ textAlign: 'center' }}>
+        Don't have an account? <Link to="/signup">Create one</Link>
+      </p>
+      </div>
+    </div>
+  );
+}

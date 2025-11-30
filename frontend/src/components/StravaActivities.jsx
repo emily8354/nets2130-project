@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 const API_BASE = 'http://localhost:4000';
 
@@ -19,7 +20,18 @@ function StravaActivities({ user, unit = 'km' }) {
 
   const checkConnection = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/strava/status?username=${user.username}`);
+      // Prefer Supabase user id when available; fallback to legacy username
+      const idParam = user?.id ? `userId=${user.id}` : `username=${encodeURIComponent(user.username)}`;
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const response = await fetch(`${API_BASE}/api/strava/status?${idParam}`, { headers });
       const status = await response.json();
       setConnected(status.connected);
       if (status.connected) {
@@ -43,8 +55,20 @@ function StravaActivities({ user, unit = 'km' }) {
     setLoading(true);
     setError(null);
     try {
+      // Prefer Supabase user id when available; fallback to legacy username
+      const idParam = user?.id ? `userId=${user.id}` : `username=${encodeURIComponent(user.username)}`;
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
       const response = await fetch(
-        `${API_BASE}/api/strava/activities?username=${user.username}&per_page=10&page=${page}`
+        `${API_BASE}/api/strava/activities?${idParam}&per_page=10&page=${page}`,
+        { headers }
       );
 
       if (response.status === 401) {

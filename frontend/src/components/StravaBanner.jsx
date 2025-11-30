@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 const API_BASE = 'http://localhost:4000';
 
@@ -16,7 +17,8 @@ function StravaBanner({ user, onConnectionChange }) {
 
   const fetchConnectionStatus = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/strava/status?username=${user.username}`);
+      const idParam = user?.id ? `userId=${user.id}` : `username=${user.username}`;
+      const response = await fetch(`${API_BASE}/api/strava/status?${idParam}`);
       const status = await response.json();
       setConnectionStatus(status);
       setLoading(false);
@@ -29,7 +31,17 @@ function StravaBanner({ user, onConnectionChange }) {
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      const response = await fetch(`${API_BASE}/api/strava/auth?username=${user.username}`);
+      let headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
+
+      const idParam = user?.id ? `userId=${user.id}` : `username=${user.username}`;
+      const response = await fetch(`${API_BASE}/api/strava/auth?${idParam}`, { headers });
       const data = await response.json();
       if (data.authUrl) {
         window.location.href = data.authUrl;

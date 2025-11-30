@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { supabase } from './supabaseClient';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
@@ -10,6 +11,8 @@ import StravaBanner from './components/StravaBanner';
 import StravaActivities from './components/StravaActivities';
 import Profile from './pages/Profile';
 import Leaderboards from './pages/Leaderboards';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 
 // Fix Leaflet default icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -364,44 +367,109 @@ function StreaksAndBadges({ user }) {
 }
 
 function Login({ onAuth }) {
-  const [username, setUsername] = useState('alice');
-  const [password, setPassword] = useState('pass123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const authenticate = async (path) => {
-    const response = await fetch(`${API_BASE}/${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, city: 'Philadelphia', teamName: 'Team Alpha' }),
+  const fetchProfileAndSetUser = async (accessToken) => {
+    // Ask backend for profile using the Supabase access token
+    const resp = await fetch(`${API_BASE}/api/profiles/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
-    const payload = await response.json();
-    if (payload.user) {
-      onAuth(payload.user);
-      // Ensure the URL is the dashboard after login so the app shows the dashboard by default
-      try {
-        window.history.replaceState({}, document.title, '/');
-      } catch (e) {
-        // fallback
-        window.location.href = '/';
+    const payload = await resp.json();
+    const supaUser = payload.user;
+    const profile = payload.profile || {};
+    const clientUser = {
+      id: supaUser?.id,
+      email: supaUser?.email,
+      username: profile.display_name || (supaUser?.email ? supaUser.email.split('@')[0] : 'user'),
+      teamId: profile.team_id || null,
+      city: profile.city || null,
+      units: profile.units || 'km',
+      // preserve any legacy fields expected by the UI
+      points: 0,
+      streak: 0,
+      password: null,
+    };
+    onAuth(clientUser);
+  };
+
+  const handleEmailSignUp = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    setLoading(false);
+    if (error) return alert(error.message || 'Sign up failed');
+    // After sign up, prompt user to verify email. Attempt to sign in immediately.
+    try {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        alert('Signed up — please check your email to confirm. Then sign in.');
+        return;
       }
-    } else {
-      alert(payload.error || 'Something went wrong');
+      const accessToken = signInData.session?.access_token;
+      if (accessToken) await fetchProfileAndSetUser(accessToken);
+    } catch (err) {
+      console.error(err);
     }
+  };
+
+  const handleEmailLogin = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) return alert(error.message || 'Login failed');
+    const accessToken = data.session?.access_token;
+    if (accessToken) await fetchProfileAndSetUser(accessToken);
+  };
+
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+    if (error) alert(error.message || 'Google sign-in failed');
+  };
+
+  const handlePhoneSend = async () => {
+    if (!phone) return alert('Enter phone number with country code, e.g. +15555551234');
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithOtp({ phone });
+    setLoading(false);
+    if (error) return alert(error.message || 'Failed to send OTP');
+    alert('OTP sent — check your phone. Complete sign-in with the code or via the link sent by Supabase.');
   };
 
   return (
     <div className="card">
-  <h3 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #2EEAC3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', textAlign: 'center' }}>Login</h3>
+      <h3 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #2EEAC3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', textAlign: 'center' }}>Sign in or Create Account</h3>
+
       <label>
-        Username
-        <input value={username} onChange={(e) => setUsername(e.target.value)} />
+        Email
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
       </label>
+
       <label>
         Password
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Choose a strong password" />
+      </label>
+
+      <div className="button-row">
+        <button onClick={handleEmailLogin} disabled={loading}>Sign in</button>
+        <button onClick={handleEmailSignUp} disabled={loading}>Create account</button>
+      </div>
+
+      <hr />
+
+      <div style={{ textAlign: 'center' }}>
+        <button onClick={handleGoogleLogin} className="oauth-button">Continue with Google</button>
+      </div>
+
+      <hr />
+
+      <label>
+        Phone (SMS OTP)
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+15555551234" />
       </label>
       <div className="button-row">
-        <button onClick={() => authenticate('login')}>Login</button>
-        <button onClick={() => authenticate('signup')}>Sign Up</button>
+        <button onClick={handlePhoneSend} disabled={loading}>Send OTP</button>
       </div>
     </div>
   );
@@ -422,14 +490,70 @@ export default function App() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // On app load, try to restore Supabase session (including after OAuth redirects)
+  useEffect(() => {
+    let mounted = true;
+    const restore = async () => {
+      try {
+        // If the OAuth provider redirected back with session info in the URL,
+        // getSessionFromUrl will parse and store it. If there's nothing to parse,
+        // it will throw or return null depending on SDK; ignore errors.
+        if (typeof supabase.auth.getSessionFromUrl === 'function') {
+          try {
+            await supabase.auth.getSessionFromUrl({ storeSession: true });
+            // clean URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (e) {
+            // ignore - no session in URL
+          }
+        }
+
+        // Finally, read current session (if any)
+        const sessionResp = await supabase.auth.getSession();
+        const session = sessionResp?.data?.session;
+        const accessToken = session?.access_token;
+        if (accessToken && mounted) {
+          // fetch profile & set user
+          try {
+            const resp = await fetch(`${API_BASE}/api/profiles/me`, {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            const payload = await resp.json();
+            const supaUser = payload.user;
+            const profile = payload.profile || {};
+            const clientUser = {
+              id: supaUser?.id,
+              email: supaUser?.email,
+              username: profile.display_name || (supaUser?.email ? supaUser.email.split('@')[0] : 'user'),
+              teamId: profile.team_id || null,
+              city: profile.city || null,
+              units: profile.units || 'km',
+              points: 0,
+              streak: 0,
+              password: null,
+            };
+            setUser(clientUser);
+          } catch (err) {
+            console.error('Error restoring profile after session:', err);
+          }
+        }
+      } catch (err) {
+        console.error('Error restoring Supabase session:', err);
+      }
+    };
+    restore();
+    return () => { mounted = false; };
+  }, []);
+
   // Handle Strava OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const stravaSuccess = urlParams.get('strava_success');
     const stravaError = urlParams.get('strava_error');
     const username = urlParams.get('username');
+    const supaUserId = urlParams.get('supaUserId');
 
-    if (stravaSuccess === 'true' && username) {
+    if (stravaSuccess === 'true' && (username || supaUserId)) {
       alert('Successfully connected to Strava!');
       setStravaConnected(true);
       // Clean up URL
@@ -461,7 +585,9 @@ export default function App() {
   // Keep track of whether this user has a Strava connection
   useEffect(() => {
     if (!user) return;
-    fetch(`${API_BASE}/api/strava/status?username=${user.username}`)
+    // Prefer checking by Supabase user id
+    const userId = user.id || user.username;
+    fetch(`${API_BASE}/api/strava/status?userId=${userId}`)
       .then((res) => res.json())
       .then((status) => {
         setStravaConnected(Boolean(status.connected));
@@ -502,29 +628,31 @@ export default function App() {
 
   if (!user) {
     return (
-      <main className="layout login-layout">
-        <header className="login-header">
-          <div className="login-brand">
-            <a href="/" style={{ textDecoration: 'none' }}>
-              <h1 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #2EEAC3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: 0 }}>Kinnect</h1>
-            </a>
-            <img src="/no-bg-KinnectApp.png" alt="Kinnect" className="app-icon large below-title" />
-          </div>
-        </header>
-        <Login onAuth={setUser} />
-      </main>
+      <BrowserRouter>
+        <main className="layout login-layout">
+          <header className="login-header">
+            <div className="login-brand">
+              <a href="/" style={{ textDecoration: 'none' }}>
+                <h1 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #2EEAC3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: 0 }}>Kinnect</h1>
+              </a>
+              <img src="/no-bg-KinnectApp.png" alt="Kinnect" className="app-icon large below-title" />
+            </div>
+          </header>
+
+          <Routes>
+            <Route path="/signup" element={<SignupPage onAuth={setUser} />} />
+            <Route path="/login" element={<LoginPage onAuth={setUser} />} />
+            <Route path="/" element={<LoginPage onAuth={setUser} />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </main>
+      </BrowserRouter>
     );
   }
 
   const handleActivityLogged = () => {
     refreshData();
-    fetch(`${API_BASE}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user.username, password: user.password }),
-    })
-      .then((res) => res.json())
-      .then((data) => setUser(data.user));
+    // No local login refresh needed; refreshData will re-query leaderboards and map
   };
 
   const handleStravaConnectionChange = () => {
