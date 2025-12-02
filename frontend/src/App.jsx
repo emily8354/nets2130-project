@@ -14,6 +14,8 @@ import Profile from './pages/Profile';
 import Leaderboards from './pages/Leaderboards';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import Friends from './pages/Friends';
+import Teams from './pages/Teams';
 
 // Fix Leaflet default icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -677,6 +679,8 @@ export default function App() {
         <Routes>
           <Route path="/profile" element={<Profile user={user} onLogout={handleLogout} onUnitChange={handleUnitChange} unit={unit} stravaConnected={stravaConnected} onConnectionChange={handleStravaConnectionChange} />} />
           <Route path="/leaderboards" element={<Leaderboards user={user} />} />
+          <Route path="/friends" element={<Friends user={user} />} />
+          <Route path="/teams" element={<Teams user={user} />} />
           <Route
             path="/"
             element={(

@@ -15,6 +15,8 @@ function Navbar({ user, onLogActivityClick }) {
       <div className="navbar-center">
         <NavLink to="/" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Dashboard</NavLink>
         <NavLink to="/leaderboards" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Leaderboards</NavLink>
+        <NavLink to="/friends" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Friends</NavLink>
+        <NavLink to="/teams" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Teams</NavLink>
         <NavLink to="/profile" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Profile</NavLink>
       </div>
       <div className="navbar-right">

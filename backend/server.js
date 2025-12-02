@@ -876,6 +876,560 @@ app.get('/api/strava/activities', stravaLimiter, async (req, res) => {
 });
 
 /**********************
+ * Friends endpoints
+ **********************/
+
+// Send a friend request
+app.post('/api/friends/request', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { receiver_id } = req.body;
+    if (!receiver_id) return res.status(400).json({ error: 'receiver_id required' });
+    if (receiver_id === user.id) return res.status(400).json({ error: 'Cannot send friend request to yourself' });
+
+    // Check if request already exists (either direction)
+    const { data: existingRequests } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+    const existing = existingRequests?.find(req => 
+      (req.sender_id === user.id && req.receiver_id === receiver_id) ||
+      (req.sender_id === receiver_id && req.receiver_id === user.id)
+    );
+
+    if (existing) {
+      if (existing.status === 'pending') {
+        return res.status(400).json({ error: 'Friend request already exists' });
+      }
+      if (existing.status === 'accepted') {
+        return res.status(400).json({ error: 'Already friends' });
+      }
+    }
+
+    // Check if already friends
+    const user1_id = user.id < receiver_id ? user.id : receiver_id;
+    const user2_id = user.id < receiver_id ? receiver_id : user.id;
+    
+    const { data: friendship } = await supabase
+      .from('friendships')
+      .select('*')
+      .eq('user1_id', user1_id)
+      .eq('user2_id', user2_id)
+      .single();
+
+    if (friendship) {
+      return res.status(400).json({ error: 'Already friends' });
+    }
+
+    // Create friend request
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .insert({
+        sender_id: user.id,
+        receiver_id: receiver_id,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message || error });
+    res.json({ message: 'Friend request sent', request: data });
+  } catch (err) {
+    console.error('Error sending friend request', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Accept or reject a friend request
+app.post('/api/friends/respond', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { request_id, action } = req.body; // action: 'accept' or 'reject'
+    if (!request_id || !action) return res.status(400).json({ error: 'request_id and action required' });
+    if (!['accept', 'reject'].includes(action)) return res.status(400).json({ error: 'action must be "accept" or "reject"' });
+
+    // Get the friend request
+    const { data: request, error: fetchError } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('id', request_id)
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending')
+      .single();
+
+    if (fetchError || !request) {
+      return res.status(404).json({ error: 'Friend request not found' });
+    }
+
+    if (action === 'accept') {
+      // Create friendship (ensure user1_id < user2_id)
+      const user1_id = request.sender_id < request.receiver_id ? request.sender_id : request.receiver_id;
+      const user2_id = request.sender_id < request.receiver_id ? request.receiver_id : request.sender_id;
+
+      const { error: friendshipError } = await supabase
+        .from('friendships')
+        .insert({
+          user1_id: user1_id,
+          user2_id: user2_id
+        });
+
+      if (friendshipError) {
+        return res.status(500).json({ error: friendshipError.message || friendshipError });
+      }
+    }
+
+    // Update request status
+    const { data: updated, error: updateError } = await supabase
+      .from('friend_requests')
+      .update({ status: action === 'accept' ? 'accepted' : 'rejected' })
+      .eq('id', request_id)
+      .select()
+      .single();
+
+    if (updateError) return res.status(500).json({ error: updateError.message || updateError });
+
+    res.json({ message: `Friend request ${action}ed`, request: updated });
+  } catch (err) {
+    console.error('Error responding to friend request', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get friend requests (sent and received)
+app.get('/api/friends/requests', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    // Get sent requests
+    const { data: sentRequestsData } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('sender_id', user.id)
+      .eq('status', 'pending');
+
+    // Get received requests
+    const { data: receivedRequestsData } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending');
+
+    // Fetch profile data for senders and receivers
+    const sentRequests = await Promise.all((sentRequestsData || []).map(async (req) => {
+      const { data: receiver } = await supabase.from('profiles').select('display_name, id').eq('id', req.receiver_id).single();
+      return { ...req, receiver: receiver || { id: req.receiver_id } };
+    }));
+
+    const receivedRequests = await Promise.all((receivedRequestsData || []).map(async (req) => {
+      const { data: sender } = await supabase.from('profiles').select('display_name, id').eq('id', req.sender_id).single();
+      return { ...req, sender: sender || { id: req.sender_id } };
+    }));
+
+    res.json({
+      sent: sentRequests,
+      received: receivedRequests
+    });
+  } catch (err) {
+    console.error('Error fetching friend requests', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get friends list
+app.get('/api/friends', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    // Get friendships where user is either user1 or user2
+    const { data: friendships } = await supabase
+      .from('friendships')
+      .select('*')
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+
+    // Fetch profile data and transform to friend list
+    const friends = await Promise.all((friendships || []).map(async (friendship) => {
+      const friendId = friendship.user1_id === user.id ? friendship.user2_id : friendship.user1_id;
+      const { data: friendProfile } = await supabase
+        .from('profiles')
+        .select('display_name, id, city, avatar_url')
+        .eq('id', friendId)
+        .single();
+      
+      return {
+        id: friendProfile?.id || friendId,
+        display_name: friendProfile?.display_name || friendId,
+        city: friendProfile?.city || null,
+        avatar_url: friendProfile?.avatar_url || null,
+        friendship_id: friendship.id,
+        created_at: friendship.created_at
+      };
+    }));
+
+    res.json({ friends });
+  } catch (err) {
+    console.error('Error fetching friends', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Remove a friend
+app.delete('/api/friends/:friendship_id', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { friendship_id } = req.params;
+
+    // Verify user is part of this friendship
+    const { data: friendship } = await supabase
+      .from('friendships')
+      .select('*')
+      .eq('id', friendship_id)
+      .single();
+
+    if (friendship && friendship.user1_id !== user.id && friendship.user2_id !== user.id) {
+      return res.status(403).json({ error: 'Not authorized to remove this friendship' });
+    }
+
+    if (!friendship) {
+      return res.status(404).json({ error: 'Friendship not found' });
+    }
+
+    // Delete friendship
+    const { error } = await supabase
+      .from('friendships')
+      .delete()
+      .eq('id', friendship_id);
+
+    if (error) return res.status(500).json({ error: error.message || error });
+
+    res.json({ message: 'Friend removed' });
+  } catch (err) {
+    console.error('Error removing friend', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+/**********************
+ * Teams endpoints
+ **********************/
+
+// Create a team
+app.post('/api/teams', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { name, description, city } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+
+    // Create team
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .insert({
+        name: name,
+        description: description || null,
+        city: city || null,
+        created_by: user.id
+      })
+      .select()
+      .single();
+
+    if (teamError) return res.status(500).json({ error: teamError.message || teamError });
+
+    // Add creator as team owner
+    const { error: memberError } = await supabase
+      .from('team_members')
+      .insert({
+        team_id: team.id,
+        user_id: user.id,
+        role: 'owner'
+      });
+
+    if (memberError) {
+      // Rollback team creation if member insert fails
+      await supabase.from('teams').delete().eq('id', team.id);
+      return res.status(500).json({ error: memberError.message || memberError });
+    }
+
+    res.json({ message: 'Team created', team });
+  } catch (err) {
+    console.error('Error creating team', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get all teams
+app.get('/api/teams', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+
+  try {
+    const { data: teams, error } = await supabase
+      .from('teams')
+      .select('*, creator:profiles!teams_created_by_fkey(display_name, id), members:team_members(user_id, role, profiles:profiles!team_members_user_id_fkey(display_name, id, city))')
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message || error });
+
+    res.json({ teams });
+  } catch (err) {
+    console.error('Error fetching teams', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get a specific team
+app.get('/api/teams/:team_id', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+
+  try {
+    const { team_id } = req.params;
+
+    const { data: teamData, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('id', team_id)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') return res.status(404).json({ error: 'Team not found' });
+      return res.status(500).json({ error: error.message || error });
+    }
+
+    // Fetch creator and members
+    const { data: creator } = await supabase.from('profiles').select('display_name, id').eq('id', teamData.created_by).single();
+    const { data: membersData } = await supabase.from('team_members').select('user_id, role').eq('team_id', team_id);
+    const members = await Promise.all((membersData || []).map(async (member) => {
+      const { data: profile } = await supabase.from('profiles').select('display_name, id, city').eq('id', member.user_id).single();
+      return { ...member, profile: profile || { id: member.user_id } };
+    }));
+    
+    const team = { ...teamData, creator: creator || { id: teamData.created_by }, members };
+
+    res.json({ team });
+  } catch (err) {
+    console.error('Error fetching team', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Join a team
+app.post('/api/teams/:team_id/join', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { team_id } = req.params;
+
+    // Check if team exists
+    const { data: team } = await supabase.from('teams').select('*').eq('id', team_id).single();
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    // Check if already a member
+    const { data: existing } = await supabase
+      .from('team_members')
+      .select('*')
+      .eq('team_id', team_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (existing) return res.status(400).json({ error: 'Already a member of this team' });
+
+    // Add member
+    const { data: member, error } = await supabase
+      .from('team_members')
+      .insert({
+        team_id: team_id,
+        user_id: user.id,
+        role: 'member'
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message || error });
+
+    res.json({ message: 'Joined team', member });
+  } catch (err) {
+    console.error('Error joining team', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Leave a team
+app.post('/api/teams/:team_id/leave', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { team_id } = req.params;
+
+    // Check if member
+    const { data: member } = await supabase
+      .from('team_members')
+      .select('*')
+      .eq('team_id', team_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!member) return res.status(404).json({ error: 'Not a member of this team' });
+
+    // Owners cannot leave (they must delete the team or transfer ownership)
+    if (member.role === 'owner') {
+      return res.status(400).json({ error: 'Team owners cannot leave. Delete the team or transfer ownership first.' });
+    }
+
+    // Remove member
+    const { error } = await supabase
+      .from('team_members')
+      .delete()
+      .eq('team_id', team_id)
+      .eq('user_id', user.id);
+
+    if (error) return res.status(500).json({ error: error.message || error });
+
+    res.json({ message: 'Left team' });
+  } catch (err) {
+    console.error('Error leaving team', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Update team (only owner/admin)
+app.put('/api/teams/:team_id', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { team_id } = req.params;
+    const { name, description, city } = req.body;
+
+    // Check if user is owner or admin
+    const { data: member } = await supabase
+      .from('team_members')
+      .select('role')
+      .eq('team_id', team_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!member || !['owner', 'admin'].includes(member.role)) {
+      return res.status(403).json({ error: 'Only team owners and admins can update the team' });
+    }
+
+    // Update team
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+    if (city !== undefined) updates.city = city;
+
+    const { data: team, error } = await supabase
+      .from('teams')
+      .update(updates)
+      .eq('id', team_id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message || error });
+
+    res.json({ message: 'Team updated', team });
+  } catch (err) {
+    console.error('Error updating team', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Delete team (only owner)
+app.delete('/api/teams/:team_id', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { team_id } = req.params;
+
+    // Check if user is owner
+    const { data: member } = await supabase
+      .from('team_members')
+      .select('role')
+      .eq('team_id', team_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!member || member.role !== 'owner') {
+      return res.status(403).json({ error: 'Only team owners can delete the team' });
+    }
+
+    // Delete team (cascade will delete team_members)
+    const { error } = await supabase
+      .from('teams')
+      .delete()
+      .eq('id', team_id);
+
+    if (error) return res.status(500).json({ error: error.message || error });
+
+    res.json({ message: 'Team deleted' });
+  } catch (err) {
+    console.error('Error deleting team', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+/**********************
  * Server start helper (for integration tests)
  **********************/
 if (require.main === module) {
