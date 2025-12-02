@@ -324,8 +324,12 @@ app.post('/activities', (req, res) => {
   res.json({ message: 'Activity logged', activity });
 });
 
-app.get('/activities/:username', (req, res) => {
-  const userActivities = activities.filter((activity) => activity.username === req.params.username);
+app.get('/activities/:identifier', (req, res) => {
+  const identifier = req.params.identifier;
+  // Support both username and user_id
+  const userActivities = activities.filter((activity) => 
+    activity.username === identifier || activity.user_id === identifier
+  );
   res.json(userActivities);
 });
 

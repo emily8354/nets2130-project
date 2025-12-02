@@ -19,6 +19,7 @@ function LogActivityModal({ user, isOpen, onClose, onLogged }) {
 
     const payloadBody = {
       username: user.username,
+      user_id: user.id || null, // Include user_id if available (Supabase)
       title: activity.title,
       type: activity.type,
       distanceKm,

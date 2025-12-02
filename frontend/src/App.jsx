@@ -9,6 +9,7 @@ import Navbar from './components/Navbar';
 import LogActivityModal from './components/LogActivityModal';
 import StravaBanner from './components/StravaBanner';
 import StravaActivities from './components/StravaActivities';
+import LoggedActivities from './components/LoggedActivities';
 import Profile from './pages/Profile';
 import Leaderboards from './pages/Leaderboards';
 import LoginPage from './pages/LoginPage';
@@ -489,6 +490,7 @@ export default function App() {
   const [stravaConnected, setStravaConnected] = useState(false);
   const [teamMembers, setTeamMembers] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activityRefreshTrigger, setActivityRefreshTrigger] = useState(0);
 
   // On app load, try to restore Supabase session (including after OAuth redirects)
   useEffect(() => {
@@ -652,7 +654,8 @@ export default function App() {
 
   const handleActivityLogged = () => {
     refreshData();
-    // No local login refresh needed; refreshData will re-query leaderboards and map
+    // Trigger refresh of logged activities list
+    setActivityRefreshTrigger(prev => prev + 1);
   };
 
   const handleStravaConnectionChange = () => {
@@ -710,6 +713,7 @@ export default function App() {
 
                   {/* Right Column (swapped: StravaActivities above Leaderboard) */}
                   <div className="dashboard-right">
+                    <LoggedActivities user={user} unit={unit} refreshTrigger={activityRefreshTrigger} />
                     <StravaActivities user={user} unit={unit} />
                     <Leaderboard data={leaderboard} />
                   </div>
