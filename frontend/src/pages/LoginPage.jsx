@@ -16,6 +16,18 @@ export default function LoginPage({ onAuth }) {
     const payload = await resp.json();
     const supaUser = payload.user;
     const profile = payload.profile || {};
+    
+    // Check if profile is complete (has username and city)
+    const hasUsername = profile.display_name && profile.display_name.trim().length > 0;
+    const hasCity = profile.city && profile.city.trim().length > 0;
+    const isProfileComplete = hasUsername && hasCity;
+    
+    if (!isProfileComplete) {
+      // Profile incomplete - redirect to create profile
+      window.location.href = '/create-profile';
+      return;
+    }
+    
     const clientUser = {
       id: supaUser?.id,
       email: supaUser?.email,
@@ -23,8 +35,11 @@ export default function LoginPage({ onAuth }) {
       teamId: profile.team_id || null,
       city: profile.city || null,
       units: profile.units || 'km',
-      points: 0,
-      streak: 0,
+      lat: profile.lat || null,
+      lng: profile.lng || null,
+      points: profile.points || 0,
+      streak: profile.streak || 0,
+      badges: profile.badges || [],
       password: null,
     };
     onAuth(clientUser);

@@ -137,28 +137,117 @@ function getLeaderboards() {
   if (supabase) {
     return (async () => {
       try {
-        const { data: profiles } = await supabase.from('profiles').select('*');
+        console.log('[LEADERBOARD] Building leaderboards...');
+        
+        // Fetch profiles
+        const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*');
+        if (profilesError) {
+          console.error('[LEADERBOARD] Error fetching profiles:', profilesError);
+        }
 
-        // Aggregate points from in-memory activities (if any)
+        // Fetch activities from database
+        const { data: dbActivities, error: activitiesError } = await supabase
+          .from('activities')
+          .select('user_id, points_earned')
+          .limit(10000); // Reasonable limit
+        
+        if (activitiesError) {
+          console.error('[LEADERBOARD] Error fetching activities:', activitiesError);
+        }
+
+        // Aggregate points from database activities
         const pointsByUser = {};
-        activities.forEach((act) => {
-          const uid = act.user_id || act.username;
-          pointsByUser[uid] = (pointsByUser[uid] || 0) + (act.pointsEarned || 0);
+        (dbActivities || []).forEach((act) => {
+          if (act.user_id) {
+            pointsByUser[act.user_id] = (pointsByUser[act.user_id] || 0) + (act.points_earned || 0);
+          }
+        });
+
+        // Also include points from profiles table (in case they're stored there)
+        (profiles || []).forEach((p) => {
+          if (p.points && p.points > 0) {
+            pointsByUser[p.id] = (pointsByUser[p.id] || 0) + (p.points || 0);
+          }
+        });
+
+        // Fetch teams and team members
+        const { data: teamsData, error: teamsError } = await supabase
+          .from('teams')
+          .select('id, name');
+        
+        if (teamsError) {
+          console.error('[LEADERBOARD] Error fetching teams:', teamsError);
+        }
+
+        const { data: teamMembersData, error: membersError } = await supabase
+          .from('team_members')
+          .select('team_id, user_id');
+        
+        if (membersError) {
+          console.error('[LEADERBOARD] Error fetching team members:', membersError);
+        }
+
+        // Build map of user_id -> team_id
+        const userToTeamMap = {};
+        (teamMembersData || []).forEach((member) => {
+          userToTeamMap[member.user_id] = member.team_id;
+        });
+
+        // Build map of team_id -> team name
+        const teamIdToName = {};
+        (teamsData || []).forEach((team) => {
+          teamIdToName[team.id] = team.name;
         });
 
         // Individual leaderboard
-        const individual = (profiles || []).map((p) => ({ id: p.id, display_name: p.display_name || p.id, city: p.city || null, team_id: p.team_id || null, points: pointsByUser[p.id] || 0 }));
+        const individual = (profiles || []).map((p) => ({
+          id: p.id,
+          display_name: p.display_name || p.id,
+          city: p.city || null,
+          team_id: userToTeamMap[p.id] || null,
+          points: pointsByUser[p.id] || (p.points || 0),
+          streak: p.streak || 0
+        }));
         individual.sort((a, b) => b.points - a.points);
-        const individualLeaderboard = individual.map((u, idx) => ({ rank: idx + 1, username: u.display_name, points: u.points, teamId: u.team_id }));
+        const individualLeaderboard = individual.map((u, idx) => ({
+          rank: idx + 1,
+          username: u.display_name,
+          points: u.points,
+          teamId: u.team_id
+        }));
 
-        // Team leaderboard
+        // Team leaderboard - aggregate by team
         const teamMap = {};
+        const teamActivityCount = {};
+        
+        // Count activities per team
+        (dbActivities || []).forEach((act) => {
+          const teamId = userToTeamMap[act.user_id];
+          if (teamId) {
+            teamActivityCount[teamId] = (teamActivityCount[teamId] || 0) + 1;
+          }
+        });
+
+        // Aggregate points by team
         individual.forEach((u) => {
           if (!u.team_id) return;
-          if (!teamMap[u.team_id]) teamMap[u.team_id] = { id: u.team_id, name: u.team_id, totalPoints: 0, totalActivities: 0 };
+          if (!teamMap[u.team_id]) {
+            teamMap[u.team_id] = {
+              id: u.team_id,
+              name: teamIdToName[u.team_id] || u.team_id,
+              totalPoints: 0,
+              totalActivities: 0
+            };
+          }
           teamMap[u.team_id].totalPoints += u.points;
+          teamMap[u.team_id].totalActivities = teamActivityCount[u.team_id] || 0;
         });
-        const teamLeaderboard = Object.values(teamMap).sort((a, b) => b.totalPoints - a.totalPoints).map((t, i) => ({ rank: i + 1, ...t }));
+
+        const teamLeaderboard = Object.values(teamMap)
+          .sort((a, b) => b.totalPoints - a.totalPoints)
+          .map((t, i) => ({ rank: i + 1, ...t }));
+
+        console.log(`[LEADERBOARD] Built leaderboards: ${teamLeaderboard.length} teams, ${individualLeaderboard.length} individuals`);
 
         // City leaderboard
         const cityMap = {};
@@ -166,12 +255,16 @@ function getLeaderboards() {
           const city = u.city || 'Unknown';
           if (!cityMap[city]) cityMap[city] = { city, points: 0, streak: 0 };
           cityMap[city].points += u.points;
+          // Track highest streak in city
+          if (u.streak > (cityMap[city].streak || 0)) {
+            cityMap[city].streak = u.streak;
+          }
         });
         const cityLeaderboard = Object.values(cityMap).sort((a, b) => b.points - a.points);
 
         return { teamLeaderboard, cityLeaderboard, individualLeaderboard };
       } catch (err) {
-        console.error('Error building leaderboards from Supabase:', err);
+        console.error('[LEADERBOARD] Exception building leaderboards:', err);
         return { teamLeaderboard: [], cityLeaderboard: [], individualLeaderboard: [] };
       }
     })();
@@ -217,7 +310,7 @@ app.post('/api/auth/signup', async (req, res) => {
     // Create user via admin API (service_role key)
     const { data, error } = await supabase.auth.admin.createUser({
       email,
-      password,
+    password,
       email_confirm: true,
       user_metadata: { display_name }
     });
@@ -277,14 +370,31 @@ app.post('/api/profiles/upsert', async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Invalid token' });
 
     // Accept profile fields from body
-    const { display_name, avatar_url, team_id, city, units } = req.body;
+    const { display_name, avatar_url, team_id, city, units, lat, lng, points, streak, badges } = req.body;
+    
+    // Get coordinates from city if lat/lng not provided
+    let finalLat = lat;
+    let finalLng = lng;
+    if (!finalLat || !finalLng) {
+      const coords = getCityCoordinates(city || '');
+      finalLat = coords.lat;
+      finalLng = coords.lng;
+    }
+    
     const profileRow = {
       id: user.id,
       display_name: display_name || user.user_metadata?.display_name || user.email.split('@')[0],
       avatar_url: avatar_url || null,
       team_id: team_id || null,
       city: city || null,
-      units: units || 'km'
+      units: units || 'km',
+      lat: finalLat || null,
+      lng: finalLng || null,
+      points: points !== undefined ? points : 0,
+      streak: streak !== undefined ? streak : 0,
+      badges: badges || [],
+      status: 'online',
+      last_seen: new Date().toISOString()
     };
 
     const { data, error } = await supabase.from('profiles').upsert(profileRow).select().limit(1).single();
@@ -300,9 +410,83 @@ app.post('/api/profiles/upsert', async (req, res) => {
 /**********************
  * Activity workflow
  **********************/
-app.post('/activities', (req, res) => {
+app.post('/activities', async (req, res) => {
   // Accept either username (legacy) or user_id (supabase) in body
   const { username, user_id, type, distanceKm = 0, durationMinutes = 0, date = getToday() } = req.body;
+  
+  // If Supabase is configured, require user_id and authentication
+  if (supabase) {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+    
+    try {
+      const user = await getSupabaseUserFromToken(token);
+      if (!user) return res.status(401).json({ error: 'Invalid token' });
+      
+      const activity = {
+        user_id: user.id,
+        type,
+        distance_km: distanceKm,
+        duration_minutes: durationMinutes,
+        date,
+      };
+      const points = calculatePoints({ type, distanceKm, durationMinutes });
+      activity.points_earned = points;
+
+      // Save to database
+      const { data: savedActivity, error: dbError } = await supabase
+        .from('activities')
+        .insert(activity)
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Error saving activity to database:', dbError);
+        // Fall back to in-memory if table doesn't exist
+        activities.push({ ...activity, id: generateId('act'), pointsEarned: points });
+        return res.json({ message: 'Activity logged (in-memory fallback)', activity: { ...activity, pointsEarned: points } });
+      }
+
+      // Update user's points and streak in profile
+      const { data: profile } = await supabase.from('profiles').select('points, streak, last_activity_date').eq('id', user.id).single();
+      if (profile) {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        let newStreak = profile.streak || 0;
+        if (profile.last_activity_date === date) {
+          // Already logged today, streak unchanged
+        } else if (profile.last_activity_date === yesterday) {
+          newStreak += 1;
+        } else {
+          newStreak = 1;
+        }
+        
+        await supabase.from('profiles').update({
+          points: (profile.points || 0) + points,
+          streak: newStreak,
+          last_activity_date: date
+        }).eq('id', user.id);
+      }
+
+      return res.json({ 
+        message: 'Activity logged', 
+        activity: {
+          id: savedActivity.id,
+          user_id: savedActivity.user_id,
+          type: savedActivity.type,
+          distanceKm: savedActivity.distance_km,
+          durationMinutes: savedActivity.duration_minutes,
+          pointsEarned: savedActivity.points_earned,
+          date: savedActivity.date
+        }
+      });
+    } catch (err) {
+      console.error('Error in activities endpoint:', err);
+      return res.status(500).json({ error: err.message || String(err) });
+    }
+  }
+  
+  // Fallback: in-memory storage (legacy)
   const actor = user_id || username;
   if (!actor) return res.status(400).json({ error: 'username or user_id required' });
 
@@ -319,14 +503,50 @@ app.post('/activities', (req, res) => {
   activity.pointsEarned = points;
 
   activities.push(activity);
-
-  // Note: updateUserProgress and updateTeamProgress require profile/team data; skip in Supabase mode
   res.json({ message: 'Activity logged', activity });
 });
 
-app.get('/activities/:identifier', (req, res) => {
+app.get('/activities/:identifier', async (req, res) => {
   const identifier = req.params.identifier;
-  // Support both username and user_id
+  
+  // If Supabase is configured, fetch from database
+  if (supabase) {
+    try {
+      const { data: userActivities, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('user_id', identifier)
+        .order('date', { ascending: false })
+        .limit(100);
+      
+      if (error) {
+        console.error('Error fetching activities:', error);
+        // Fallback to in-memory
+        const userActivities = activities.filter((activity) => 
+          activity.username === identifier || activity.user_id === identifier
+        );
+        return res.json(userActivities);
+      }
+      
+      // Transform database format to frontend format
+      const transformed = (userActivities || []).map(a => ({
+        id: a.id,
+        user_id: a.user_id,
+        type: a.type,
+        distanceKm: a.distance_km,
+        durationMinutes: a.duration_minutes,
+        pointsEarned: a.points_earned,
+        date: a.date
+      }));
+      
+      return res.json(transformed);
+    } catch (err) {
+      console.error('Error in activities GET:', err);
+      return res.status(500).json({ error: err.message || String(err) });
+    }
+  }
+  
+  // Fallback: in-memory storage
   const userActivities = activities.filter((activity) => 
     activity.username === identifier || activity.user_id === identifier
   );
@@ -351,33 +571,46 @@ app.get('/activity-map', (req, res) => {
     // Build map points from activities and profiles when available
     if (supabase) {
       try {
-        const { data: profiles } = await supabase.from('profiles').select('*');
-        const profileById = {};
-        (profiles || []).forEach((p) => { profileById[p.id] = p; });
+        // Fetch activities from database
+        const { data: dbActivities, error: activitiesError } = await supabase
+          .from('activities')
+          .select('*')
+          .order('date', { ascending: false })
+          .limit(500);
+        
+        if (activitiesError) {
+          console.error('Error fetching activities for map:', activitiesError);
+          // Fallback to in-memory
+        } else if (dbActivities && dbActivities.length > 0) {
+          // Fetch profiles for location data
+          const { data: profiles } = await supabase.from('profiles').select('*');
+          const profileById = {};
+          (profiles || []).forEach((p) => { profileById[p.id] = p; });
 
-        const mapPoints = activities.map((activity, index) => {
-          const uid = activity.user_id || activity.username;
-          const profile = profileById[uid];
-          const coords = profile ? getCityCoordinates(profile.city || 'Unknown') : { lat: 39.9526, lng: -75.1652 };
-          return {
-            id: `map-${index}`,
-            userId: uid,
-            username: profile?.display_name || uid,
-            lat: profile?.lat || coords.lat + (Math.random() - 0.5) * 0.01,
-            lng: profile?.lng || coords.lng + (Math.random() - 0.5) * 0.01,
-            intensity: activity.pointsEarned || 1,
-            type: activity.type,
-            date: activity.date,
-          };
-        });
+          const mapPoints = dbActivities.map((activity, index) => {
+            const uid = activity.user_id;
+            const profile = profileById[uid];
+            const coords = profile ? getCityCoordinates(profile.city || 'Unknown') : { lat: 39.9526, lng: -75.1652 };
+            return {
+              id: activity.id || `map-${index}`,
+              userId: uid,
+              username: profile?.display_name || uid,
+              lat: profile?.lat || coords.lat + (Math.random() - 0.5) * 0.01,
+              lng: profile?.lng || coords.lng + (Math.random() - 0.5) * 0.01,
+              intensity: activity.points_earned || 1,
+              type: activity.type,
+              date: activity.date,
+            };
+          });
 
-        return res.json({ mapPoints });
+          return res.json({ mapPoints });
+        }
       } catch (err) {
         console.error('Error building activity map from Supabase:', err);
       }
     }
 
-    // Fallback: return empty map or based on minimal activities
+    // Fallback: return empty map or based on minimal activities (in-memory)
     const mapPoints = activities.map((activity, index) => ({
       id: `map-${index}`,
       username: activity.username || activity.user_id,
@@ -387,7 +620,7 @@ app.get('/activity-map', (req, res) => {
       type: activity.type,
       date: activity.date,
     }));
-    res.json({ mapPoints });
+  res.json({ mapPoints });
   })();
 });
 
@@ -406,7 +639,7 @@ app.get('/team-members', (req, res) => {
           return res.status(500).json({ members: [] });
         }
 
-        const now = Date.now();
+  const now = Date.now();
         const members = (profiles || []).map((p) => {
           // Provide default coordinates based on city
           const coords = getCityCoordinates(p.city || 'Unknown');
@@ -416,8 +649,8 @@ app.get('/team-members', (req, res) => {
           let status = 'offline';
           if (timeSinceLastSeen < 300000) status = 'active';
           else if (timeSinceLastSeen < 900000) status = 'online';
-
-          return {
+    
+    return {
             username: p.display_name || p.id,
             city: p.city || null,
             teamId: p.team_id || null,
@@ -428,9 +661,9 @@ app.get('/team-members', (req, res) => {
             status,
             lastSeen,
             lastActivityDate: null,
-          };
-        });
-
+    };
+  });
+  
         return res.json({ members });
       } catch (err) {
         console.error('Error fetching team members from Supabase:', err);
@@ -544,30 +777,30 @@ app.get('/api/strava/auth', (req, res) => {
       if (!username) {
         return res.status(400).json({ error: 'username required when not authenticated via Supabase' });
       }
-      if (!users[username]) {
-        return res.status(404).json({ error: 'User not found' });
+  if (!users[username]) {
+    return res.status(404).json({ error: 'User not found' });
       }
       stateData.username = username;
-    }
+  }
 
-    const state = generateState();
+  const state = generateState();
     stateData.timestamp = Date.now();
     oauthStates.set(state, stateData);
 
-    // Clean up old states (older than 10 minutes)
-    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-    for (const [key, value] of oauthStates.entries()) {
-      if (value.timestamp < tenMinutesAgo) {
-        oauthStates.delete(key);
-      }
+  // Clean up old states (older than 10 minutes)
+  const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+  for (const [key, value] of oauthStates.entries()) {
+    if (value.timestamp < tenMinutesAgo) {
+      oauthStates.delete(key);
     }
+  }
 
-    // Note: Callback must go to backend, not frontend, since backend exchanges code for tokens
-    const redirectUri = encodeURIComponent(process.env.STRAVA_REDIRECT_URI || 'http://localhost:4000/api/strava/callback');
-    const scope = 'read,activity:read_all';
-    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${process.env.STRAVA_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
+  // Note: Callback must go to backend, not frontend, since backend exchanges code for tokens
+  const redirectUri = encodeURIComponent(process.env.STRAVA_REDIRECT_URI || 'http://localhost:4000/api/strava/callback');
+  const scope = 'read,activity:read_all';
+  const authUrl = `https://www.strava.com/oauth/authorize?client_id=${process.env.STRAVA_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
 
-    res.json({ authUrl, state });
+  res.json({ authUrl, state });
   })();
 });
 
@@ -708,14 +941,14 @@ app.get('/api/strava/callback', async (req, res) => {
     // Keep in-memory store for legacy/demo mode when username was used
     if (stateData.username) {
       stravaConnections[stateData.username] = {
-        stravaAthleteId: tokenData.athlete.id,
-        accessTokenEncrypted: encrypt(tokenData.accessToken, ENCRYPTION_KEY),
-        refreshTokenEncrypted: encrypt(tokenData.refreshToken, ENCRYPTION_KEY),
-        expiresAt: tokenData.expiresAt,
-        scope: tokenData.scope,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
+      stravaAthleteId: tokenData.athlete.id,
+      accessTokenEncrypted: encrypt(tokenData.accessToken, ENCRYPTION_KEY),
+      refreshTokenEncrypted: encrypt(tokenData.refreshToken, ENCRYPTION_KEY),
+      expiresAt: tokenData.expiresAt,
+      scope: tokenData.scope,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
     }
 
     // Redirect to frontend with success. If we have a username include it for client UX.
@@ -803,7 +1036,7 @@ app.get('/api/strava/status', (req, res) => {
           const expiresAt = tokenRow.expires_at ? new Date(tokenRow.expires_at).getTime() : null;
           return res.json({ connected: true, stravaAthleteId: tokenRow.athlete_id || null, expiresAt, isExpired: isTokenExpired(expiresAt), scope: tokenRow.scope });
         }
-        return res.json({ connected: false });
+    return res.json({ connected: false });
       } catch (err) {
         console.error('Error checking strava_tokens:', err);
         return res.status(500).json({ connected: false });
@@ -1056,6 +1289,145 @@ app.get('/api/friends/requests', async (req, res) => {
   }
 });
 
+// Debug endpoint to list all profiles (for testing)
+app.get('/api/profiles/debug', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  try {
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id, display_name, city, created_at')
+      .limit(50);
+    
+    if (error) {
+      return res.status(500).json({ error: error.message || error });
+    }
+    
+    res.json({ 
+      count: profiles?.length || 0,
+      profiles: profiles || []
+    });
+  } catch (err) {
+    console.error('Error in debug endpoint:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Search profiles by username/display_name
+app.get('/api/profiles/search', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { q } = req.query;
+    if (!q || q.trim().length === 0) {
+      return res.json({ profiles: [] });
+    }
+
+    const searchTerm = q.trim();
+    console.log(`[SEARCH] User ${user.id} searching for profiles with display_name containing: "${searchTerm}"`);
+
+    // Use service role client to bypass RLS - search all profiles
+    // First, get all profiles to see what we have
+    const { data: allProfiles, error: allError } = await supabase
+      .from('profiles')
+      .select('id, display_name, city')
+      .limit(100);
+    
+    if (allError) {
+      console.error('[SEARCH] Error fetching all profiles:', allError);
+    } else {
+      console.log(`[SEARCH] Total profiles in DB: ${allProfiles?.length || 0}`);
+      if (allProfiles && allProfiles.length > 0) {
+        console.log('[SEARCH] Sample profiles:', allProfiles.slice(0, 5).map(p => ({ id: p.id, name: p.display_name })));
+      }
+    }
+
+    // Search profiles by display_name (case-insensitive)
+    // Use service role to bypass RLS - this should work
+    let profiles = [];
+    let error = null;
+    
+    // Primary search query - use ilike for case-insensitive search
+    const searchQuery = supabase
+      .from('profiles')
+      .select('id, display_name, city')
+      .ilike('display_name', `%${searchTerm}%`)
+      .limit(50);
+    
+    const result = await searchQuery;
+    error = result.error;
+    profiles = result.data || [];
+    
+    if (error) {
+      console.error('[SEARCH] Error in search query:', error);
+      // Try a simpler query as fallback
+      const fallbackQuery = supabase
+        .from('profiles')
+        .select('id, display_name, city')
+        .limit(50);
+      const fallbackResult = await fallbackQuery;
+      if (!fallbackResult.error && fallbackResult.data) {
+        // Filter in JavaScript as fallback
+        profiles = fallbackResult.data.filter(p => 
+          p.display_name && 
+          p.display_name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        error = null;
+        console.log(`[SEARCH] Fallback search found ${profiles.length} profiles`);
+      }
+    }
+
+    // Try to get lat/lng if columns exist (optional)
+    if (!error && profiles.length > 0) {
+      try {
+        const { data: profilesWithCoords } = await supabase
+          .from('profiles')
+          .select('id, lat, lng')
+          .in('id', profiles.map(p => p.id));
+        
+        if (profilesWithCoords) {
+          const coordsMap = new Map(profilesWithCoords.map(p => [p.id, { lat: p.lat, lng: p.lng }]));
+          profiles = profiles.map(p => ({ ...p, ...coordsMap.get(p.id) }));
+        }
+      } catch (e) {
+        // lat/lng columns don't exist, that's okay
+        console.log('[SEARCH] lat/lng columns not available');
+      }
+    }
+
+    if (error) {
+      console.error('[SEARCH] Final error:', error);
+      return res.status(500).json({ error: error.message || String(error) });
+    }
+
+    // Filter out current user and ensure display_name exists
+    const filtered = (profiles || []).filter(p => {
+      const isValid = p.id !== user.id && 
+                      p.display_name && 
+                      p.display_name.trim().length > 0;
+      if (!isValid && p.id === user.id) {
+        console.log(`[SEARCH] Filtered out current user: ${p.display_name}`);
+      }
+      return isValid;
+    });
+
+    console.log(`[SEARCH] Found ${profiles?.length || 0} total profiles, ${filtered.length} after filtering`);
+    if (filtered.length > 0) {
+      console.log('[SEARCH] Returning profiles:', filtered.slice(0, 3).map(p => ({ id: p.id, display_name: p.display_name })));
+    }
+
+    res.json({ profiles: filtered });
+  } catch (err) {
+    console.error('[SEARCH] Exception in profile search:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Get friends list
 app.get('/api/friends', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
@@ -1160,6 +1532,8 @@ app.post('/api/teams', async (req, res) => {
     const { name, description, city } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
 
+    console.log(`[TEAMS CREATE] User ${user.id} creating team "${name}"`);
+
     // Create team
     const { data: team, error: teamError } = await supabase
       .from('teams')
@@ -1172,26 +1546,48 @@ app.post('/api/teams', async (req, res) => {
       .select()
       .single();
 
-    if (teamError) return res.status(500).json({ error: teamError.message || teamError });
+    if (teamError) {
+      console.error('[TEAMS CREATE] Error creating team:', teamError);
+      return res.status(500).json({ error: teamError.message || teamError });
+    }
+
+    console.log(`[TEAMS CREATE] Team created with ID: ${team.id}`);
 
     // Add creator as team owner
-    const { error: memberError } = await supabase
+    const { data: member, error: memberError } = await supabase
       .from('team_members')
       .insert({
         team_id: team.id,
         user_id: user.id,
         role: 'owner'
-      });
+      })
+      .select()
+      .single();
 
     if (memberError) {
+      console.error('[TEAMS CREATE] Error adding owner as member:', memberError);
       // Rollback team creation if member insert fails
       await supabase.from('teams').delete().eq('id', team.id);
       return res.status(500).json({ error: memberError.message || memberError });
     }
 
-    res.json({ message: 'Team created', team });
+    console.log(`[TEAMS CREATE] Owner added as member: ${member.id}`);
+
+    // Fetch the complete team with creator and members
+    const { data: creator } = await supabase.from('profiles').select('display_name, id').eq('id', user.id).single();
+    const teamWithDetails = {
+      ...team,
+      creator: creator || { id: user.id, display_name: 'Unknown' },
+      members: [{
+        user_id: user.id,
+        role: 'owner',
+        profile: creator || { id: user.id, display_name: 'Unknown' }
+      }]
+    };
+
+    res.json({ message: 'Team created', team: teamWithDetails });
   } catch (err) {
-    console.error('Error creating team', err);
+    console.error('[TEAMS CREATE] Exception:', err);
     res.status(500).json({ error: err.message || String(err) });
   }
 });
@@ -1201,16 +1597,82 @@ app.get('/api/teams', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
 
   try {
-    const { data: teams, error } = await supabase
+    // Fetch teams
+    const { data: teamsData, error: teamsError } = await supabase
       .from('teams')
-      .select('*, creator:profiles!teams_created_by_fkey(display_name, id), members:team_members(user_id, role, profiles:profiles!team_members_user_id_fkey(display_name, id, city))')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) return res.status(500).json({ error: error.message || error });
+    if (teamsError) {
+      console.error('[TEAMS] Error fetching teams:', teamsError);
+      return res.status(500).json({ error: teamsError.message || teamsError });
+    }
 
+    if (!teamsData || teamsData.length === 0) {
+      return res.json({ teams: [] });
+    }
+
+    // Fetch members for all teams
+    const teamIds = teamsData.map(t => t.id);
+    const { data: membersData, error: membersError } = await supabase
+      .from('team_members')
+      .select('team_id, user_id, role')
+      .in('team_id', teamIds);
+
+    if (membersError) {
+      console.error('[TEAMS] Error fetching members:', membersError);
+      // Continue without members rather than failing completely
+    }
+
+    // Group members by team_id
+    const membersByTeam = {};
+    (membersData || []).forEach(member => {
+      if (!membersByTeam[member.team_id]) {
+        membersByTeam[member.team_id] = [];
+      }
+      membersByTeam[member.team_id].push(member);
+    });
+
+    // Fetch creator profiles and member profiles
+    const creatorIds = [...new Set(teamsData.map(t => t.created_by))];
+    const memberUserIds = [...new Set((membersData || []).map(m => m.user_id))];
+    const allUserIds = [...new Set([...creatorIds, ...memberUserIds])];
+
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, display_name, city')
+      .in('id', allUserIds);
+
+    if (profilesError) {
+      console.error('[TEAMS] Error fetching profiles:', profilesError);
+    }
+
+    // Create profile lookup map
+    const profileMap = {};
+    (profilesData || []).forEach(profile => {
+      profileMap[profile.id] = profile;
+    });
+
+    // Build teams with creator and members
+    const teams = teamsData.map(team => {
+      const creator = profileMap[team.created_by] || { id: team.created_by, display_name: 'Unknown' };
+      const members = (membersByTeam[team.id] || []).map(member => ({
+        user_id: member.user_id,
+        role: member.role,
+        profile: profileMap[member.user_id] || { id: member.user_id, display_name: 'Unknown' }
+      }));
+
+      return {
+        ...team,
+        creator,
+        members
+      };
+    });
+
+    console.log(`[TEAMS] Returning ${teams.length} teams`);
     res.json({ teams });
   } catch (err) {
-    console.error('Error fetching teams', err);
+    console.error('[TEAMS] Exception fetching teams:', err);
     res.status(500).json({ error: err.message || String(err) });
   }
 });

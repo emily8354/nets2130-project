@@ -14,6 +14,7 @@ import Profile from './pages/Profile';
 import Leaderboards from './pages/Leaderboards';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import CreateProfile from './pages/CreateProfile';
 import Friends from './pages/Friends';
 import Teams from './pages/Teams';
 
@@ -282,7 +283,7 @@ function ActivityMap({ mapPoints, teamMembers }) {
           <p style={{ color: '#cbd5e1' }}><strong>Streak:</strong> {selectedMember.streak} days 🔥</p>
           <p style={{ color: '#cbd5e1' }}><strong>Team:</strong> {selectedMember.teamId}</p>
           <button onClick={() => setSelectedMember(null)} style={{ marginTop: '0.5rem' }}>Close</button>
-        </div>
+          </div>
       )}
     </div>
   );
@@ -355,14 +356,14 @@ function StreaksAndBadges({ user }) {
         <div className="badges-grid">
           {pointBadges.map((badge) => {
             const earned = user.points >= badge.points;
-            return (
+          return (
               <div key={badge.points} className={`badge ${earned ? 'earned' : 'locked'}`}>
                 <div className="badge-icon">{badge.icon}</div>
                 <div className="badge-name">{badge.name}</div>
                 <div className="badge-requirement">{badge.points} pts</div>
               </div>
-            );
-          })}
+          );
+        })}
         </div>
       </section>
     </div>
@@ -383,6 +384,18 @@ function Login({ onAuth }) {
     const payload = await resp.json();
     const supaUser = payload.user;
     const profile = payload.profile || {};
+    
+    // Check if profile is complete (has username and city)
+    const hasUsername = profile.display_name && profile.display_name.trim().length > 0;
+    const hasCity = profile.city && profile.city.trim().length > 0;
+    const isProfileComplete = hasUsername && hasCity;
+    
+    if (!isProfileComplete) {
+      // Profile incomplete, set flag to show create profile page
+      setNeedsProfile(true);
+      return;
+    }
+    
     const clientUser = {
       id: supaUser?.id,
       email: supaUser?.email,
@@ -390,11 +403,14 @@ function Login({ onAuth }) {
       teamId: profile.team_id || null,
       city: profile.city || null,
       units: profile.units || 'km',
-      // preserve any legacy fields expected by the UI
-      points: 0,
-      streak: 0,
+      lat: profile.lat || null,
+      lng: profile.lng || null,
+      points: profile.points || 0,
+      streak: profile.streak || 0,
+      badges: profile.badges || [],
       password: null,
     };
+    setNeedsProfile(false);
     onAuth(clientUser);
   };
 
@@ -480,6 +496,7 @@ function Login({ onAuth }) {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [needsProfile, setNeedsProfile] = useState(false);
   const [unit, setUnit] = useState(() => {
     try {
       return localStorage.getItem('distanceUnit') || 'km';
@@ -525,6 +542,16 @@ export default function App() {
             const payload = await resp.json();
             const supaUser = payload.user;
             const profile = payload.profile || {};
+            // Check if profile is complete
+            const hasUsername = profile.display_name && profile.display_name.trim().length > 0;
+            const hasCity = profile.city && profile.city.trim().length > 0;
+            const isProfileComplete = hasUsername && hasCity;
+            
+            if (!isProfileComplete) {
+              setNeedsProfile(true);
+              return;
+            }
+            
             const clientUser = {
               id: supaUser?.id,
               email: supaUser?.email,
@@ -532,10 +559,14 @@ export default function App() {
               teamId: profile.team_id || null,
               city: profile.city || null,
               units: profile.units || 'km',
-              points: 0,
-              streak: 0,
+              lat: profile.lat || null,
+              lng: profile.lng || null,
+              points: profile.points || 0,
+              streak: profile.streak || 0,
+              badges: profile.badges || [],
               password: null,
             };
+            setNeedsProfile(false);
             setUser(clientUser);
           } catch (err) {
             console.error('Error restoring profile after session:', err);
@@ -611,6 +642,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    setNeedsProfile(false);
     // clear frontend state and preferences
     setUser(null);
     try {
@@ -630,6 +662,18 @@ export default function App() {
       .then((data) => setTeamMembers(data.members || []));
   };
 
+  // Show create profile page if user is logged in but profile is incomplete
+  if (needsProfile) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/create-profile" element={<CreateProfile onProfileComplete={(user) => { setNeedsProfile(false); setUser(user); }} />} />
+          <Route path="*" element={<Navigate to="/create-profile" replace />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
   if (!user) {
     return (
       <BrowserRouter>
@@ -646,10 +690,11 @@ export default function App() {
           <Routes>
             <Route path="/signup" element={<SignupPage onAuth={setUser} />} />
             <Route path="/login" element={<LoginPage onAuth={setUser} />} />
+            <Route path="/create-profile" element={<CreateProfile onProfileComplete={(user) => { setNeedsProfile(false); setUser(user); }} />} />
             <Route path="/" element={<LoginPage onAuth={setUser} />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
-        </main>
+      </main>
       </BrowserRouter>
     );
   }
@@ -673,10 +718,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <main className="layout">
+    <main className="layout">
         <Navbar user={user} onLogActivityClick={() => setIsModalOpen(true)} />
 
         <Routes>
+          <Route path="/create-profile" element={<Navigate to="/" replace />} />
           <Route path="/profile" element={<Profile user={user} onLogout={handleLogout} onUnitChange={handleUnitChange} unit={unit} stravaConnected={stravaConnected} onConnectionChange={handleStravaConnectionChange} />} />
           <Route path="/leaderboards" element={<Leaderboards user={user} />} />
           <Route path="/friends" element={<Friends user={user} />} />
@@ -719,7 +765,7 @@ export default function App() {
                   <div className="dashboard-right">
                     <LoggedActivities user={user} unit={unit} refreshTrigger={activityRefreshTrigger} />
                     <StravaActivities user={user} unit={unit} />
-                    <Leaderboard data={leaderboard} />
+        <Leaderboard data={leaderboard} />
                   </div>
                 </div>
               </div>
@@ -734,7 +780,7 @@ export default function App() {
           onClose={() => setIsModalOpen(false)}
           onLogged={handleActivityLogged}
         />
-      </main>
+    </main>
     </BrowserRouter>
   );
 }

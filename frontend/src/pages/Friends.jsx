@@ -128,42 +128,92 @@ export default function Friends({ user }) {
       setSearchResults([]);
       return;
     }
+    
+    // Don't search if query is too short (less than 1 character)
+    if (searchQuery.trim().length < 1) {
+      setSearchResults([]);
+      return;
+    }
+    
     setSearching(true);
     try {
-      // Search profiles by display_name
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('id, display_name, city')
-        .ilike('display_name', `%${searchQuery}%`)
-        .limit(10);
+      // Search profiles via backend API (bypasses RLS)
+      const headers = await getAuthHeaders();
+      const query = searchQuery.trim();
+      const url = `${API_BASE}/api/profiles/search?q=${encodeURIComponent(query)}`;
+      
+      console.log('[FRONTEND] Searching for:', query);
+      console.log('[FRONTEND] URL:', url);
+      console.log('[FRONTEND] Headers:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'missing' });
+      
+      const res = await fetch(url, { headers });
+      
+      console.log('[FRONTEND] Response status:', res.status, res.statusText);
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('[FRONTEND] Search API error:', errorData);
+        console.error('[FRONTEND] Response text:', await res.text().catch(() => ''));
+        throw new Error(errorData.error || `Search failed: ${res.status} ${res.statusText}`);
+      }
 
-      if (error) throw error;
+      const data = await res.json();
+      const profiles = data.profiles || [];
+      
+      console.log('[FRONTEND] Raw search results:', profiles);
+      console.log('[FRONTEND] Number of results:', profiles.length);
 
-      // Filter out current user and existing friends
+      // Filter out existing friends and pending requests
       const friendIds = new Set(friends.map(f => f.id));
       const requestIds = new Set([
         ...requests.sent.map(r => r.receiver?.id || r.receiver_id),
         ...requests.received.map(r => r.sender?.id || r.sender_id)
       ]);
 
-      const filtered = (profiles || []).filter(
-        p => p.id !== user?.id && !friendIds.has(p.id) && !requestIds.has(p.id)
+      console.log('[FRONTEND] Friend IDs:', Array.from(friendIds));
+      console.log('[FRONTEND] Request IDs:', Array.from(requestIds));
+      console.log('[FRONTEND] Current user ID:', user?.id);
+
+      const filtered = profiles.filter(
+        p => {
+          const isNotSelf = p.id !== user?.id;
+          const isNotFriend = !friendIds.has(p.id);
+          const isNotRequest = !requestIds.has(p.id);
+          const shouldInclude = isNotSelf && isNotFriend && isNotRequest;
+          if (!shouldInclude) {
+            console.log(`[FRONTEND] Filtered out profile ${p.display_name}:`, { isNotSelf, isNotFriend, isNotRequest });
+          }
+          return shouldInclude;
+        }
       );
+      
+      console.log('[FRONTEND] Filtered results:', filtered);
+      console.log('[FRONTEND] Final count:', filtered.length);
       setSearchResults(filtered);
     } catch (err) {
-      console.error('Error searching users:', err);
+      console.error('[FRONTEND] Error searching users:', err);
+      console.error('[FRONTEND] Error details:', err.message, err.stack);
       setSearchResults([]);
+      // Show error to user
+      alert(`Search error: ${err.message}. Check console for details.`);
     } finally {
       setSearching(false);
     }
   };
 
   useEffect(() => {
+    // Search immediately if query is empty (to clear results)
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    // Debounce search for 200ms to show results as you type
     const timeoutId = setTimeout(() => {
       searchUsers();
-    }, 300);
+    }, 200);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+  }, [searchQuery, friends, requests]);
 
   if (loading) {
     return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
@@ -184,12 +234,15 @@ export default function Friends({ user }) {
           style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem' }}
         />
         {searching && <p className="small">Searching...</p>}
+        {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
+          <p className="small" style={{ color: '#666' }}>No users found matching "{searchQuery}"</p>
+        )}
         {searchResults.length > 0 && (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {searchResults.map((profile) => (
               <li key={profile.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid #eee' }}>
                 <div>
-                  <strong>{profile.display_name}</strong>
+                  <strong>{profile.display_name || 'Unknown User'}</strong>
                   {profile.city && <span className="small" style={{ marginLeft: '0.5rem' }}>• {profile.city}</span>}
                 </div>
                 <button
@@ -202,9 +255,6 @@ export default function Friends({ user }) {
               </li>
             ))}
           </ul>
-        )}
-        {searchQuery && !searching && searchResults.length === 0 && (
-          <p className="small">No users found</p>
         )}
       </div>
 

@@ -29,16 +29,35 @@ export default function Teams({ user }) {
       const res = await fetch(`${API_BASE}/api/teams`, { headers });
       if (res.ok) {
         const data = await res.json();
-        setTeams(data.teams || []);
+        const allTeams = data.teams || [];
+        console.log('[FRONTEND TEAMS] Loaded teams:', allTeams.length);
+        console.log('[FRONTEND TEAMS] Current user ID:', user?.id);
+        console.log('[FRONTEND TEAMS] Sample team members:', allTeams[0]?.members);
+        
+        setTeams(allTeams);
         
         // Find teams user is a member of
-        const userTeams = (data.teams || []).filter(team => 
-          team.members?.some(member => member.user_id === user?.id)
-        );
+        const userTeams = allTeams.filter(team => {
+          const isMember = team.members?.some(member => {
+            const matches = member.user_id === user?.id;
+            if (matches) {
+              console.log(`[FRONTEND TEAMS] User is member of team "${team.name}"`);
+            }
+            return matches;
+          });
+          return isMember;
+        });
+        
+        console.log('[FRONTEND TEAMS] User teams:', userTeams.length);
         setMyTeams(userTeams);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('[FRONTEND TEAMS] Error response:', res.status, errorData);
+        alert(`Failed to load teams: ${errorData.error || res.statusText}`);
       }
     } catch (err) {
-      console.error('Error loading teams:', err);
+      console.error('[FRONTEND TEAMS] Exception loading teams:', err);
+      alert('Error loading teams. Check console for details.');
     }
   };
 
@@ -86,12 +105,14 @@ export default function Teams({ user }) {
 
   const handleJoinTeam = async (teamId) => {
     try {
+      console.log(`[FRONTEND TEAMS] Joining team ${teamId}`);
       const headers = await getAuthHeaders();
       const res = await fetch(`${API_BASE}/api/teams/${teamId}/join`, {
         method: 'POST',
         headers
       });
       const data = await res.json();
+      console.log(`[FRONTEND TEAMS] Join response:`, res.status, data);
       if (res.ok) {
         alert('Joined team!');
         await loadTeams();
@@ -99,8 +120,8 @@ export default function Teams({ user }) {
         alert(data.error || 'Failed to join team');
       }
     } catch (err) {
-      console.error('Error joining team:', err);
-      alert('Error joining team');
+      console.error('[FRONTEND TEAMS] Exception joining team:', err);
+      alert(`Error joining team: ${err.message}`);
     }
   };
 
