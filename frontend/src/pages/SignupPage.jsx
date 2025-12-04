@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function SignupPage({ onAuth }) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,6 +42,7 @@ export default function SignupPage({ onAuth }) {
       password: null,
     };
     onAuth(clientUser);
+    navigate('/', { replace: true });
   };
 
   const handleEmailSignUp = async () => {

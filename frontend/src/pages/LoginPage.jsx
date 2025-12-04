@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const API_BASE = 'http://localhost:4000';
 
 export default function LoginPage({ onAuth }) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,6 +44,7 @@ export default function LoginPage({ onAuth }) {
       password: null,
     };
     onAuth(clientUser);
+    navigate('/', { replace: true });
   };
 
   const handleEmailLogin = async () => {

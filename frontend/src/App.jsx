@@ -323,7 +323,6 @@ export default function App() {
             <Route path="/signup" element={<SignupPage onAuth={setUser} />} />
             <Route path="/login" element={<LoginPage onAuth={setUser} />} />
             <Route path="/create-profile" element={<CreateProfile onProfileComplete={(user) => { setNeedsProfile(false); setUser(user); }} />} />
-            <Route path="/" element={<LoginPage onAuth={setUser} />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
       </main>
