@@ -10,6 +10,8 @@ function StravaActivities({ user, unit = 'km' }) {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [importing, setImporting] = useState({});
+  const [importingAll, setImportingAll] = useState(false);
 
   // Check connection status first
   useEffect(() => {
@@ -67,7 +69,7 @@ function StravaActivities({ user, unit = 'km' }) {
       }
 
       const response = await fetch(
-        `${API_BASE}/api/strava/activities?${idParam}&per_page=10&page=${page}`,
+        `${API_BASE}/api/strava/activities?${idParam}&per_page=10&page=${page}&excludeImported=true`,
         { headers }
       );
 
@@ -140,6 +142,94 @@ function StravaActivities({ user, unit = 'km' }) {
     return icons[type] || '🏃';
   };
 
+  const handleImportActivity = async (stravaActivityId) => {
+    setImporting({ ...importing, [stravaActivityId]: true });
+    try {
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        console.error('Error getting session:', err);
+      }
+
+      const response = await fetch(`${API_BASE}/api/activities/import-strava`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          stravaActivityIds: [stravaActivityId]
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        const pointsEarned = data.details?.imported?.[0]?.points || 0;
+        alert(`Activity imported! You earned ${pointsEarned} points.`);
+        // Remove the imported activity from the list
+        setActivities(prev => prev.filter(a => a.id !== stravaActivityId));
+        // Trigger refresh of "My Activities"
+        window.dispatchEvent(new Event('activityImported'));
+      } else {
+        alert(data.error || 'Failed to import activity');
+      }
+    } catch (err) {
+      console.error('Error importing activity:', err);
+      alert('Error importing activity');
+    } finally {
+      setImporting({ ...importing, [stravaActivityId]: false });
+    }
+  };
+
+  const handleImportAll = async () => {
+    if (!confirm(`Import all ${activities.length} Strava activities? This will add them to your activity log and award points.`)) {
+      return;
+    }
+
+    setImportingAll(true);
+    try {
+      const headers = {};
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch (err) {
+        console.error('Error getting session:', err);
+      }
+
+      const response = await fetch(`${API_BASE}/api/activities/import-strava`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          importAll: true
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        alert(`Imported ${data.imported} activities! You earned points for ${data.imported} new activities.${data.skipped > 0 ? ` ${data.skipped} were already imported.` : ''}`);
+        // Refresh activities list to remove imported ones
+        setPage(1); // Reset to first page
+        await fetchActivities();
+        // Trigger refresh of "My Activities"
+        window.dispatchEvent(new Event('activityImported'));
+      } else {
+        alert(data.error || 'Failed to import activities');
+      }
+    } catch (err) {
+      console.error('Error importing all activities:', err);
+      alert('Error importing activities');
+    } finally {
+      setImportingAll(false);
+    }
+  };
+
   if (!connected) {
     return (
       <div className="card">
@@ -169,20 +259,44 @@ function StravaActivities({ user, unit = 'km' }) {
 
   return (
     <div className="card">
-      <h3>Strava Activities</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h3>Strava Activities</h3>
+        {activities.length > 0 && (
+          <button
+            onClick={handleImportAll}
+            disabled={importingAll}
+            className="btn-primary"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+          >
+            {importingAll ? 'Importing...' : 'Add All'}
+          </button>
+        )}
+      </div>
       {loading && activities.length === 0 ? (
         <p>Loading activities...</p>
       ) : (
         <>
           <div className="activities-list">
             {activities.map((activity) => (
-              <div key={activity.id} className="activity-item">
+              <div key={activity.id} className="activity-item" style={{ position: 'relative' }}>
                 <div className="activity-header">
                   <span className="activity-icon">{getActivityTypeIcon(activity.type)}</span>
-                  <div className="activity-info">
+                  <div className="activity-info" style={{ flex: 1 }}>
                     <h4>{activity.name || activity.type}</h4>
                     <p className="small">{formatDate(activity.start_date_local)}</p>
                   </div>
+                  <button
+                    onClick={() => handleImportActivity(activity.id)}
+                    disabled={importing[activity.id]}
+                    className="btn-primary"
+                    style={{ 
+                      padding: '0.25rem 0.75rem', 
+                      fontSize: '0.75rem',
+                      marginLeft: '0.5rem'
+                    }}
+                  >
+                    {importing[activity.id] ? 'Adding...' : 'Add'}
+                  </button>
                 </div>
                 <div className="activity-stats">
                   {activity.distance > 0 && (

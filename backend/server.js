@@ -93,17 +93,38 @@ function getCityCoordinates(city) {
   return cityMap[city] || { lat: 39.9526, lng: -75.1652 }; // Default coordinates
 }
 
-function calculatePoints(activity) {
-  switch (activity.type) {
+// Calculate calories burned based on activity type, duration, and distance
+// Uses MET (Metabolic Equivalent of Task) values
+function calculateCalories(activity) {
+  const { type, distanceKm, durationMinutes } = activity;
+  
+  // Average weight in kg (can be made user-specific later)
+  const weightKg = 70;
+  const durationHours = durationMinutes / 60;
+  
+  let metValue;
+  switch (type) {
     case 'run':
-      return activity.distanceKm * 10; // 10 pts per km
+      // Running: ~10 METs for moderate pace, ~11.5 for fast pace
+      // Use distance-based calculation: ~1 kcal per kg per km
+      return Math.round(weightKg * distanceKm);
     case 'walk':
-      return activity.distanceKm * 5; // 5 pts per km
+      // Walking: ~3.5 METs, or ~0.5 kcal per kg per km
+      return Math.round(weightKg * distanceKm * 0.5);
     case 'workout':
-      return activity.durationMinutes; // 1 pt per minute
+      // General workout: ~6 METs
+      // Calories = METs × weight(kg) × hours
+      return Math.round(6 * weightKg * durationHours);
     default:
-      return 10;
+      // Default: ~5 METs
+      return Math.round(5 * weightKg * durationHours);
   }
+}
+
+function calculatePoints(activity) {
+  // Points based on calories burned: 1 point per 10 calories
+  const calories = calculateCalories(activity);
+  return Math.max(1, Math.round(calories / 10));
 }
 
 function updateUserProgress(user, activityPoints, date) {
@@ -244,13 +265,13 @@ function getLeaderboards() {
         });
 
         const teamLeaderboard = Object.values(teamMap)
-          .sort((a, b) => b.totalPoints - a.totalPoints)
+    .sort((a, b) => b.totalPoints - a.totalPoints)
           .map((t, i) => ({ rank: i + 1, ...t }));
 
         console.log(`[LEADERBOARD] Built leaderboards: ${teamLeaderboard.length} teams, ${individualLeaderboard.length} individuals`);
 
         // City leaderboard
-        const cityMap = {};
+  const cityMap = {};
         individual.forEach((u) => {
           const city = u.city || 'Unknown';
           if (!cityMap[city]) cityMap[city] = { city, points: 0, streak: 0 };
@@ -259,10 +280,10 @@ function getLeaderboards() {
           if (u.streak > (cityMap[city].streak || 0)) {
             cityMap[city].streak = u.streak;
           }
-        });
-        const cityLeaderboard = Object.values(cityMap).sort((a, b) => b.points - a.points);
+  });
+  const cityLeaderboard = Object.values(cityMap).sort((a, b) => b.points - a.points);
 
-        return { teamLeaderboard, cityLeaderboard, individualLeaderboard };
+  return { teamLeaderboard, cityLeaderboard, individualLeaderboard };
       } catch (err) {
         console.error('[LEADERBOARD] Exception building leaderboards:', err);
         return { teamLeaderboard: [], cityLeaderboard: [], individualLeaderboard: [] };
@@ -506,12 +527,251 @@ app.post('/activities', async (req, res) => {
   res.json({ message: 'Activity logged', activity });
 });
 
+// Import Strava activity/activities to user's activities
+app.post('/api/activities/import-strava', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured on server' });
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ error: 'Missing Bearer token' });
+
+  try {
+    console.log('[IMPORT] Starting Strava activity import');
+    const user = await getSupabaseUserFromToken(token);
+    if (!user) {
+      console.error('[IMPORT] Invalid token');
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    console.log(`[IMPORT] User: ${user.id}`);
+    const { stravaActivityIds, importAll = false } = req.body;
+    console.log(`[IMPORT] Request: importAll=${importAll}, stravaActivityIds=${JSON.stringify(stravaActivityIds)}`);
+    
+    // Get user's Strava connection
+    const userId = user.id;
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) {
+      return res.status(400).json({ error: 'Strava not connected. Please connect your Strava account first.' });
+    }
+
+    let activitiesToImport = [];
+    
+    if (importAll) {
+      // Fetch all Strava activities
+      console.log(`[IMPORT] Importing all Strava activities for user ${userId}`);
+      let page = 1;
+      let hasMore = true;
+      const allStravaActivities = [];
+      
+      while (hasMore && page <= 10) { // Limit to 10 pages (100 activities) to avoid rate limits
+        try {
+          const activities = await stravaApiRequest(
+            `/athlete/activities?per_page=30&page=${page}`,
+            accessToken
+          );
+          if (activities && activities.length > 0) {
+            allStravaActivities.push(...activities);
+            hasMore = activities.length === 30;
+            page++;
+          } else {
+            hasMore = false;
+          }
+        } catch (err) {
+          console.error(`[IMPORT] Error fetching page ${page}:`, err);
+          hasMore = false;
+        }
+      }
+      
+      activitiesToImport = allStravaActivities;
+      console.log(`[IMPORT] Found ${activitiesToImport.length} Strava activities to import`);
+    } else if (stravaActivityIds && Array.isArray(stravaActivityIds) && stravaActivityIds.length > 0) {
+      // Import specific activities by ID
+      console.log(`[IMPORT] Importing ${stravaActivityIds.length} specific Strava activities`);
+      for (const activityId of stravaActivityIds) {
+        try {
+          const activity = await stravaApiRequest(`/activities/${activityId}`, accessToken);
+          if (activity) {
+            activitiesToImport.push(activity);
+          }
+        } catch (err) {
+          console.error(`[IMPORT] Error fetching activity ${activityId}:`, err);
+        }
+      }
+    } else {
+      return res.status(400).json({ error: 'stravaActivityIds array or importAll=true required' });
+    }
+
+    if (activitiesToImport.length === 0) {
+      return res.json({ message: 'No activities to import', imported: 0, skipped: 0 });
+    }
+
+    // Convert Strava activities to our format and check for duplicates
+    const imported = [];
+    const skipped = [];
+    
+    for (const stravaActivity of activitiesToImport) {
+      try {
+        // Convert Strava activity type to our format
+        let activityType = 'workout';
+        if (stravaActivity.type === 'Run' || stravaActivity.type === 'TrailRun') {
+          activityType = 'run';
+        } else if (stravaActivity.type === 'Walk' || stravaActivity.type === 'Hike') {
+          activityType = 'walk';
+        } else if (stravaActivity.type === 'Ride' || stravaActivity.type === 'EBikeRide') {
+          activityType = 'workout';
+        }
+
+        const distanceKm = (stravaActivity.distance || 0) / 1000; // Convert meters to km
+        const durationMinutes = Math.round((stravaActivity.moving_time || stravaActivity.elapsed_time || 0) / 60);
+        const activityDate = stravaActivity.start_date_local 
+          ? stravaActivity.start_date_local.split('T')[0] 
+          : new Date(stravaActivity.start_date * 1000).toISOString().split('T')[0];
+
+        // Check if this activity already exists by Strava ID first, then by date+type+distance
+        const { data: existingByStravaId } = await supabase
+          .from('activities')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('strava_activity_id', stravaActivity.id)
+          .limit(1)
+          .single();
+        
+        if (existingByStravaId) {
+          skipped.push({ id: stravaActivity.id, reason: 'Already imported' });
+          continue;
+        }
+        
+        // Also check by date and approximate distance to avoid duplicates
+        const { data: existing } = await supabase
+          .from('activities')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('date', activityDate)
+          .eq('type', activityType)
+          .gte('distance_km', distanceKm * 0.95) // Allow 5% variance
+          .lte('distance_km', distanceKm * 1.05)
+          .limit(1)
+          .single();
+
+        if (existing) {
+          skipped.push({ id: stravaActivity.id, reason: 'Already imported' });
+          continue;
+        }
+
+        // Create activity
+        const activity = {
+          user_id: userId,
+          type: activityType,
+          distance_km: distanceKm,
+          duration_minutes: durationMinutes,
+          date: activityDate,
+          strava_activity_id: stravaActivity.id, // Store Strava ID to track imported activities
+        };
+        const points = calculatePoints({ type: activityType, distanceKm, durationMinutes });
+        activity.points_earned = points;
+
+        // Save to database
+        console.log(`[IMPORT] Saving activity: ${JSON.stringify(activity)}`);
+        const { data: savedActivity, error: dbError } = await supabase
+          .from('activities')
+          .insert(activity)
+          .select()
+          .single();
+
+        if (dbError) {
+          console.error(`[IMPORT] Error saving activity ${stravaActivity.id}:`, dbError);
+          console.error(`[IMPORT] Full error details:`, JSON.stringify(dbError, null, 2));
+          skipped.push({ id: stravaActivity.id, reason: dbError.message || String(dbError) });
+          continue;
+        }
+
+        console.log(`[IMPORT] Successfully saved activity ${stravaActivity.id} as ${savedActivity.id}`);
+
+        imported.push({
+          stravaId: stravaActivity.id,
+          activityId: savedActivity.id,
+          date: activityDate,
+          points
+        });
+      } catch (err) {
+        console.error(`[IMPORT] Error processing activity ${stravaActivity.id}:`, err);
+        skipped.push({ id: stravaActivity.id, reason: err.message });
+      }
+    }
+
+    // Update user's points and streak in profile
+    if (imported.length > 0) {
+      const totalPoints = imported.reduce((sum, a) => sum + a.points, 0);
+      console.log(`[IMPORT] Updating profile: ${totalPoints} total points from ${imported.length} activities`);
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('points, streak, last_activity_date').eq('id', userId).single();
+      if (profileError) {
+        console.error(`[IMPORT] Error fetching profile:`, profileError);
+      }
+      if (profile) {
+        // Find the most recent activity date from imported activities
+        const activityDates = imported.map(a => a.date).sort().reverse();
+        const mostRecentDate = activityDates[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        
+        let newStreak = profile.streak || 0;
+        // Update streak based on most recent activity
+        if (profile.last_activity_date === mostRecentDate) {
+          // Already logged on this date, streak unchanged
+        } else if (profile.last_activity_date === yesterday) {
+          newStreak += 1;
+        } else {
+          // Check if activities are consecutive days
+          const lastDate = profile.last_activity_date ? new Date(profile.last_activity_date) : null;
+          const newDate = new Date(mostRecentDate);
+          if (lastDate && (newDate - lastDate) === 86400000) {
+            // Consecutive day
+            newStreak += 1;
+          } else {
+            // Not consecutive, reset to 1
+            newStreak = 1;
+          }
+        }
+        
+        // Update points and streak
+        const { error: updateError } = await supabase.from('profiles').update({
+          points: (profile.points || 0) + totalPoints,
+          streak: newStreak,
+          last_activity_date: mostRecentDate
+        }).eq('id', userId);
+        
+        if (updateError) {
+          console.error(`[IMPORT] Error updating profile:`, updateError);
+        } else {
+          console.log(`[IMPORT] Profile updated: points=${(profile.points || 0) + totalPoints}, streak=${newStreak}`);
+        }
+      } else {
+        console.error(`[IMPORT] Profile not found for user ${userId}`);
+      }
+    } else {
+      console.log(`[IMPORT] No activities imported, skipping profile update`);
+    }
+
+    console.log(`[IMPORT] Imported ${imported.length} activities, skipped ${skipped.length}`);
+    res.json({
+      message: `Imported ${imported.length} activities`,
+      imported: imported.length,
+      skipped: skipped.length,
+      details: { imported, skipped: skipped.slice(0, 10) } // Limit skipped details
+    });
+  } catch (err) {
+    console.error('[IMPORT] Exception importing Strava activities:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 app.get('/activities/:identifier', async (req, res) => {
   const identifier = req.params.identifier;
   
   // If Supabase is configured, fetch from database
   if (supabase) {
     try {
+      console.log(`[ACTIVITIES GET] Fetching activities for identifier: ${identifier}`);
+      
+      // Try to fetch by user_id (UUID) first
       const { data: userActivities, error } = await supabase
         .from('activities')
         .select('*')
@@ -520,13 +780,15 @@ app.get('/activities/:identifier', async (req, res) => {
         .limit(100);
       
       if (error) {
-        console.error('Error fetching activities:', error);
+        console.error('[ACTIVITIES GET] Error fetching activities:', error);
         // Fallback to in-memory
         const userActivities = activities.filter((activity) => 
           activity.username === identifier || activity.user_id === identifier
         );
         return res.json(userActivities);
       }
+      
+      console.log(`[ACTIVITIES GET] Found ${userActivities?.length || 0} activities`);
       
       // Transform database format to frontend format
       const transformed = (userActivities || []).map(a => ({
@@ -541,7 +803,7 @@ app.get('/activities/:identifier', async (req, res) => {
       
       return res.json(transformed);
     } catch (err) {
-      console.error('Error in activities GET:', err);
+      console.error('[ACTIVITIES GET] Exception:', err);
       return res.status(500).json({ error: err.message || String(err) });
     }
   }
@@ -591,17 +853,17 @@ app.get('/activity-map', (req, res) => {
             const uid = activity.user_id;
             const profile = profileById[uid];
             const coords = profile ? getCityCoordinates(profile.city || 'Unknown') : { lat: 39.9526, lng: -75.1652 };
-            return {
+    return {
               id: activity.id || `map-${index}`,
               userId: uid,
               username: profile?.display_name || uid,
               lat: profile?.lat || coords.lat + (Math.random() - 0.5) * 0.01,
               lng: profile?.lng || coords.lng + (Math.random() - 0.5) * 0.01,
               intensity: activity.points_earned || 1,
-              type: activity.type,
-              date: activity.date,
-            };
-          });
+      type: activity.type,
+      date: activity.date,
+    };
+  });
 
           return res.json({ mapPoints });
         }
@@ -1088,16 +1350,37 @@ app.get('/api/strava/athlete', stravaLimiter, async (req, res) => {
 
 // GET /api/strava/activities - Get user's activities (with rate limiting)
 app.get('/api/strava/activities', stravaLimiter, async (req, res) => {
-  const { username, userId, per_page = 30, page = 1 } = req.query;
+  const { username, userId, per_page = 30, page = 1, excludeImported = false } = req.query;
   const id = userId || username;
   if (!id) return res.status(400).json({ error: 'username or userId required' });
 
   try {
     const accessToken = await getValidAccessToken(id);
-    const activities = await stravaApiRequest(
+    let activities = await stravaApiRequest(
       `/athlete/activities?per_page=${per_page}&page=${page}`,
       accessToken
     );
+    
+    // If excludeImported is true and we have Supabase, filter out already imported activities
+    if (excludeImported === 'true' && supabase && userId) {
+      try {
+        // Get all imported Strava activity IDs for this user
+        const { data: importedActivities } = await supabase
+          .from('activities')
+          .select('strava_activity_id')
+          .eq('user_id', userId)
+          .not('strava_activity_id', 'is', null);
+        
+        if (importedActivities && importedActivities.length > 0) {
+          const importedIds = new Set(importedActivities.map(a => String(a.strava_activity_id)));
+          activities = activities.filter(activity => !importedIds.has(String(activity.id)));
+        }
+      } catch (err) {
+        console.error('[STRAVA] Error filtering imported activities:', err);
+        // Continue without filtering if there's an error
+      }
+    }
+    
     res.json(activities);
   } catch (error) {
     if (error.message === 'UNAUTHORIZED') {

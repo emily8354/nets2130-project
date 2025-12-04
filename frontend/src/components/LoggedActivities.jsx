@@ -13,13 +13,22 @@ function LoggedActivities({ user, unit = 'km', refreshTrigger }) {
     }
   }, [user, refreshTrigger]);
 
+  // Listen for activity import events
+  useEffect(() => {
+    const handleActivityImported = () => {
+      fetchActivities();
+    };
+    window.addEventListener('activityImported', handleActivityImported);
+    return () => window.removeEventListener('activityImported', handleActivityImported);
+  }, [user]);
+
   const fetchActivities = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Use username to fetch activities (backend endpoint expects username)
-      const username = user.username || user.id;
-      const response = await fetch(`${API_BASE}/activities/${encodeURIComponent(username)}`);
+      // Use user ID (UUID) to fetch activities - backend expects user_id
+      const userId = user.id || user.username;
+      const response = await fetch(`${API_BASE}/activities/${encodeURIComponent(userId)}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch activities');
