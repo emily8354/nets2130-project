@@ -220,115 +220,119 @@ export default function Friends({ user }) {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '1rem' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '1rem' }}>
       <h2>Friends</h2>
 
-      {/* Search for users */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <h3>Add Friends</h3>
-        <input
-          type="text"
-          placeholder="Search by name..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem' }}
-        />
-        {searching && <p className="small">Searching...</p>}
-        {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
-          <p className="small" style={{ color: '#666' }}>No users found matching "{searchQuery}"</p>
-        )}
-        {searchResults.length > 0 && (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {searchResults.map((profile) => (
-              <li key={profile.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                <div>
-                  <strong>{profile.display_name || 'Unknown User'}</strong>
-                  {profile.city && <span className="small" style={{ marginLeft: '0.5rem' }}>• {profile.city}</span>}
-                </div>
-                <button
-                  onClick={() => handleSendRequest(profile.id)}
-                  className="btn-primary"
-                  style={{ padding: '0.25rem 0.75rem' }}
-                >
-                  Send Request
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Received requests */}
-      {requests.received.length > 0 && (
-        <div className="card" style={{ marginBottom: '1rem' }}>
-          <h3>Friend Requests ({requests.received.length})</h3>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {requests.received.map((request) => (
-              <li key={request.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                <div>
-                  <strong>{request.sender?.display_name || request.sender_id}</strong>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
+        {/* Add Friends - Column 1 */}
+        <div className="card">
+          <h3>Add Friends</h3>
+          <input
+            type="text"
+            placeholder="Search by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem' }}
+          />
+          {searching && <p className="small">Searching...</p>}
+          {!searching && searchQuery.trim().length > 0 && searchResults.length === 0 && (
+            <p className="small" style={{ color: '#666' }}>No users found matching "{searchQuery}"</p>
+          )}
+          {searchResults.length > 0 && (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {searchResults.map((profile) => (
+                <li key={profile.id} style={{ padding: '0.5rem', borderBottom: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>{profile.display_name || 'Unknown User'}</strong>
+                    {profile.city && <div className="small" style={{ color: '#cbd5e1' }}>{profile.city}</div>}
+                  </div>
                   <button
-                    onClick={() => handleRespondToRequest(request.id, 'accept')}
+                    onClick={() => handleSendRequest(profile.id)}
                     className="btn-primary"
-                    style={{ padding: '0.25rem 0.75rem' }}
+                    style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
                   >
-                    Accept
+                    Send Request
                   </button>
-                  <button
-                    onClick={() => handleRespondToRequest(request.id, 'reject')}
-                    className="btn-secondary"
-                    style={{ padding: '0.25rem 0.75rem' }}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+          
+          {/* Received requests in Add Friends column */}
+          {requests.received.length > 0 && (
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(139, 92, 246, 0.2)' }}>
+              <h4 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Friend Requests ({requests.received.length})</h4>
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {requests.received.map((request) => (
+                  <li key={request.id} style={{ padding: '0.5rem', borderBottom: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <strong>{request.sender?.display_name || request.sender_id}</strong>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => handleRespondToRequest(request.id, 'accept')}
+                        className="btn-primary"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem', flex: 1 }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleRespondToRequest(request.id, 'reject')}
+                        className="btn-secondary"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem', flex: 1 }}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Sent requests */}
-      {requests.sent.length > 0 && (
-        <div className="card" style={{ marginBottom: '1rem' }}>
+        {/* Sent Requests - Column 2 */}
+        <div className="card">
           <h3>Sent Requests ({requests.sent.length})</h3>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {requests.sent.map((request) => (
-              <li key={request.id} style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                <strong>{request.receiver?.display_name || request.receiver_id}</strong>
-                <span className="small" style={{ marginLeft: '0.5rem', color: '#666' }}>Pending</span>
-              </li>
-            ))}
-          </ul>
+          {requests.sent.length === 0 ? (
+            <p className="small" style={{ color: '#cbd5e1' }}>No pending sent requests</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {requests.sent.map((request) => (
+                <li key={request.id} style={{ padding: '0.5rem', borderBottom: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                  <strong>{request.receiver?.display_name || request.receiver_id}</strong>
+                  <div className="small" style={{ color: '#cbd5e1', marginTop: '0.25rem' }}>Pending</div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )}
 
-      {/* Friends list */}
-      <div className="card">
-        <h3>My Friends ({friends.length})</h3>
-        {friends.length === 0 ? (
-          <p className="small">No friends yet. Search for users above to add friends!</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {friends.map((friend) => (
-              <li key={friend.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                <div>
-                  <strong>{friend.display_name}</strong>
-                  {friend.city && <span className="small" style={{ marginLeft: '0.5rem' }}>• {friend.city}</span>}
-                </div>
-                <button
-                  onClick={() => handleRemoveFriend(friend.friendship_id, friend.display_name)}
-                  className="btn-secondary"
-                  style={{ padding: '0.25rem 0.75rem' }}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* My Friends - Column 3 */}
+        <div className="card">
+          <h3>My Friends ({friends.length})</h3>
+          {friends.length === 0 ? (
+            <p className="small" style={{ color: '#cbd5e1' }}>No friends yet. Search for users to add friends!</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {friends.map((friend) => (
+                <li key={friend.id} style={{ padding: '0.5rem', borderBottom: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>{friend.display_name}</strong>
+                    {friend.city && <div className="small" style={{ color: '#cbd5e1' }}>{friend.city}</div>}
+                  </div>
+                  <button
+                    onClick={() => handleRemoveFriend(friend.friendship_id, friend.display_name)}
+                    className="btn-secondary"
+                    style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
