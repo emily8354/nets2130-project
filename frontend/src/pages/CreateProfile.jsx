@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import './CreateProfile.css';
 
 const API_BASE = 'http://localhost:4000';
 
@@ -94,16 +93,19 @@ export default function CreateProfile({ onProfileComplete }) {
   };
 
   return (
-    <div className="create-profile-container">
-      <div className="create-profile-card">
-        <h2>Create Your Profile</h2>
-        <p className="subtitle">Set up your profile to start connecting with friends!</p>
+    <div className="auth-wrapper">
+      <div className="auth-card card">
+        <h3 style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #2EEAC3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', textAlign: 'center', fontSize: '2rem', marginBottom: '0.1rem' }}>
+          Create Your Profile
+        </h3>
+        <p style={{ textAlign: 'center', color: '#cbd5e1', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+          Set up your profile to start connecting with friends!
+        </p>
         
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
+          <label style={{ marginBottom: '1rem' }}>
+            Username
             <input
-              id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -112,13 +114,14 @@ export default function CreateProfile({ onProfileComplete }) {
               disabled={loading}
               required
             />
-            <small>This is how other users will see you</small>
-          </div>
+            <small style={{ display: 'block', marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.8rem' }}>
+              This is how other users will see you
+            </small>
+          </label>
 
-          <div className="form-group">
-            <label htmlFor="city">Location</label>
+          <label style={{ marginBottom: '1rem' }}>
+            Location
             <input
-              id="city"
               type="text"
               value={city}
               onChange={(e) => setCity(e.target.value)}
@@ -127,14 +130,30 @@ export default function CreateProfile({ onProfileComplete }) {
               disabled={loading}
               required
             />
-            <small>Your city or location (helps friends find you)</small>
+            <small style={{ display: 'block', marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.8rem' }}>
+              Your city or location (helps friends find you)
+            </small>
+          </label>
+
+          {error && (
+            <div style={{ 
+              background: 'rgba(239, 68, 68, 0.1)', 
+              border: '1px solid rgba(239, 68, 68, 0.3)', 
+              color: '#fca5a5', 
+              padding: '0.75rem', 
+              borderRadius: '8px', 
+              marginBottom: '1rem',
+              fontSize: '0.875rem'
+            }}>
+              {error}
+            </div>
+          )}
+
+          <div className="button-row">
+            <button type="submit" disabled={loading}>
+              {loading ? 'Creating Profile...' : 'Create Profile'}
+            </button>
           </div>
-
-          {error && <div className="error-message">{error}</div>}
-
-          <button type="submit" disabled={loading} className="submit-button">
-            {loading ? 'Creating Profile...' : 'Create Profile'}
-          </button>
         </form>
       </div>
     </div>
