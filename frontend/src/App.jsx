@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import L from 'leaflet';
@@ -277,6 +277,76 @@ export default function App() {
   }, []);
 
 
+
+  // Function to refresh user profile (for updating points, streak, etc.)
+  const refreshUserProfile = useCallback(async () => {
+    const currentUser = user; // Capture current user
+    if (!currentUser) {
+      console.log('[PROFILE REFRESH] No user, skipping refresh');
+      return;
+    }
+    try {
+      console.log('[PROFILE REFRESH] Starting profile refresh...');
+      const { data: { session } = {} } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        console.log('[PROFILE REFRESH] No access token, skipping refresh');
+        return;
+      }
+
+      const resp = await fetch(`${API_BASE}/api/profiles/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      
+      if (!resp.ok) {
+        console.error('[PROFILE REFRESH] Failed to fetch profile:', resp.status, resp.statusText);
+        return;
+      }
+      
+      const payload = await resp.json();
+      const supaUser = payload.user;
+      const profile = payload.profile || {};
+
+      console.log('[PROFILE REFRESH] Profile data from API:', { points: profile.points, streak: profile.streak });
+      console.log('[PROFILE REFRESH] Current user points before update:', currentUser.points);
+
+      const clientUser = {
+        id: supaUser?.id,
+        email: supaUser?.email,
+        username: profile.display_name || currentUser.username,
+        teamId: profile.team_id || currentUser.teamId,
+        city: profile.city || currentUser.city,
+        units: profile.units || currentUser.units || 'km',
+        lat: profile.lat || currentUser.lat,
+        lng: profile.lng || currentUser.lng,
+        points: profile.points ?? 0,
+        streak: profile.streak ?? 0,
+        badges: profile.badges || [],
+        password: null,
+      };
+      console.log('[PROFILE REFRESH] Setting user with points:', clientUser.points);
+      setUser(clientUser);
+      console.log('[PROFILE REFRESH] User state updated with points:', clientUser.points);
+    } catch (err) {
+      console.error('[PROFILE REFRESH] Error refreshing user profile:', err);
+    }
+  }, [user]);
+
+  // Listen for activity import events to refresh user profile
+  useEffect(() => {
+    if (!user) return;
+    
+    const handleActivityImported = () => {
+      console.log('[ACTIVITY IMPORT] Event received, refreshing user profile...');
+      // Add a small delay to ensure backend has finished updating
+      setTimeout(() => {
+        refreshUserProfile();
+      }, 300);
+    };
+    
+    window.addEventListener('activityImported', handleActivityImported);
+    return () => window.removeEventListener('activityImported', handleActivityImported);
+  }, [user, refreshUserProfile]);
 
   // Keep track of whether this user has a Strava connection
   useEffect(() => {

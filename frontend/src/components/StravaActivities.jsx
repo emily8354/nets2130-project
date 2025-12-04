@@ -171,8 +171,10 @@ function StravaActivities({ user, unit = 'km' }) {
         alert(`Activity imported! You earned ${pointsEarned} points.`);
         // Remove the imported activity from the list
         setActivities(prev => prev.filter(a => a.id !== stravaActivityId));
-        // Trigger refresh of "My Activities"
-        window.dispatchEvent(new Event('activityImported'));
+        // Wait a moment for backend to update profile, then trigger refresh
+        setTimeout(() => {
+          window.dispatchEvent(new Event('activityImported'));
+        }, 500);
       } else {
         alert(data.error || 'Failed to import activity');
       }
@@ -217,8 +219,10 @@ function StravaActivities({ user, unit = 'km' }) {
         // Refresh activities list to remove imported ones
         setPage(1); // Reset to first page
         await fetchActivities();
-        // Trigger refresh of "My Activities"
-        window.dispatchEvent(new Event('activityImported'));
+        // Wait a moment for backend to update profile, then trigger refresh
+        setTimeout(() => {
+          window.dispatchEvent(new Event('activityImported'));
+        }, 500);
       } else {
         alert(data.error || 'Failed to import activities');
       }
