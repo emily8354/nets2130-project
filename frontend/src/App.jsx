@@ -29,7 +29,7 @@ L.Icon.Default.mergeOptions({
  */
 import { API_BASE } from './config/api';
 
-function Login({ onAuth }) {
+function Login({ onAuth, setNeedsProfile }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
@@ -51,7 +51,7 @@ function Login({ onAuth }) {
     
     if (!isProfileComplete) {
       // Profile incomplete, set flag to show create profile page
-      setNeedsProfile(true);
+      if (setNeedsProfile) setNeedsProfile(true);
       return;
     }
     
@@ -69,7 +69,7 @@ function Login({ onAuth }) {
       badges: profile.badges || [],
       password: null,
     };
-    setNeedsProfile(false);
+    if (setNeedsProfile) setNeedsProfile(false);
     onAuth(clientUser);
   };
 

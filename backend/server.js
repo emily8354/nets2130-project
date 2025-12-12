@@ -16,6 +16,7 @@ const {
   isTokenExpired,
   stravaApiRequest
 } = require('./strava-utils');
+const { validateActivity, getQCStats } = require('./quality-control');
 
 // Supabase client (server-side, service role)
 let supabase;
@@ -445,12 +446,33 @@ app.post('/activities', async (req, res) => {
       const user = await getSupabaseUserFromToken(token);
       if (!user) return res.status(401).json({ error: 'Invalid token' });
       
+      // Quality Control validation
+      const qcResult = validateActivity({ type, distanceKm, durationMinutes, date });
+      
+      if (!qcResult.valid) {
+        console.log(`[QC] Activity rejected for user ${user.id}:`, qcResult.errors);
+        return res.status(400).json({
+          error: 'Activity validation failed',
+          details: qcResult.errors,
+          warnings: qcResult.warnings,
+          qc_metrics: qcResult.metrics
+        });
+      }
+      
+      // Log warnings if any (but still accept the activity)
+      if (qcResult.warnings.length > 0) {
+        console.log(`[QC] Activity warnings for user ${user.id}:`, qcResult.warnings);
+      }
+      
       const activity = {
         user_id: user.id,
         type,
         distance_km: distanceKm,
         duration_minutes: durationMinutes,
         date,
+        qc_status: 'accepted',
+        qc_warnings: qcResult.warnings.length > 0 ? qcResult.warnings : null,
+        qc_metrics: qcResult.metrics
       };
       const points = calculatePoints({ type, distanceKm, durationMinutes });
       activity.points_earned = points;
@@ -499,6 +521,11 @@ app.post('/activities', async (req, res) => {
           durationMinutes: savedActivity.duration_minutes,
           pointsEarned: savedActivity.points_earned,
           date: savedActivity.date
+        },
+        qc: {
+          status: 'accepted',
+          warnings: qcResult.warnings,
+          metrics: qcResult.metrics
         }
       });
     } catch (err) {
@@ -511,6 +538,24 @@ app.post('/activities', async (req, res) => {
   const actor = user_id || username;
   if (!actor) return res.status(400).json({ error: 'username or user_id required' });
 
+  // Quality Control validation
+  const qcResult = validateActivity({ type, distanceKm, durationMinutes, date });
+  
+  if (!qcResult.valid) {
+    console.log(`[QC] Activity rejected for ${actor}:`, qcResult.errors);
+    return res.status(400).json({
+      error: 'Activity validation failed',
+      details: qcResult.errors,
+      warnings: qcResult.warnings,
+      qc_metrics: qcResult.metrics
+    });
+  }
+  
+  // Log warnings if any (but still accept the activity)
+  if (qcResult.warnings.length > 0) {
+    console.log(`[QC] Activity warnings for ${actor}:`, qcResult.warnings);
+  }
+
   const activity = {
     id: generateId('act'),
     user_id: user_id || null,
@@ -519,12 +564,23 @@ app.post('/activities', async (req, res) => {
     distanceKm,
     durationMinutes,
     date,
+    qc_status: 'accepted',
+    qc_warnings: qcResult.warnings.length > 0 ? qcResult.warnings : null,
+    qc_metrics: qcResult.metrics
   };
   const points = calculatePoints(activity);
   activity.pointsEarned = points;
 
   activities.push(activity);
-  res.json({ message: 'Activity logged', activity });
+  res.json({ 
+    message: 'Activity logged', 
+    activity,
+    qc: {
+      status: 'accepted',
+      warnings: qcResult.warnings,
+      metrics: qcResult.metrics
+    }
+  });
 });
 
 // Import Strava activity/activities to user's activities
@@ -657,6 +713,28 @@ app.post('/api/activities/import-strava', async (req, res) => {
           continue;
         }
 
+        // Quality Control validation
+        const qcResult = validateActivity({ 
+          type: activityType, 
+          distanceKm, 
+          durationMinutes, 
+          date: activityDate 
+        });
+        
+        if (!qcResult.valid) {
+          console.log(`[IMPORT] Activity ${stravaActivity.id} rejected by QC:`, qcResult.errors);
+          skipped.push({ 
+            id: stravaActivity.id, 
+            reason: `QC validation failed: ${qcResult.errors.join(', ')}` 
+          });
+          continue;
+        }
+        
+        // Log warnings if any (but still accept the activity)
+        if (qcResult.warnings.length > 0) {
+          console.log(`[IMPORT] Activity ${stravaActivity.id} QC warnings:`, qcResult.warnings);
+        }
+
         // Create activity
         const activity = {
           user_id: userId,
@@ -665,6 +743,9 @@ app.post('/api/activities/import-strava', async (req, res) => {
           duration_minutes: durationMinutes,
           date: activityDate,
           strava_activity_id: stravaActivity.id, // Store Strava ID to track imported activities
+          qc_status: 'accepted',
+          qc_warnings: qcResult.warnings.length > 0 ? qcResult.warnings : null,
+          qc_metrics: qcResult.metrics
         };
         const points = calculatePoints({ type: activityType, distanceKm, durationMinutes });
         activity.points_earned = points;
@@ -2172,6 +2253,33 @@ app.delete('/api/teams/:team_id', async (req, res) => {
     console.error('Error deleting team', err);
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+/**********************
+ * Quality Control endpoints
+ **********************/
+
+// GET /api/qc/stats - Get QC rules and statistics
+app.get('/api/qc/stats', (req, res) => {
+  try {
+    const stats = getQCStats();
+    res.json(stats);
+  } catch (err) {
+    console.error('Error fetching QC stats:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /api/qc/validate - Validate an activity without saving it
+app.post('/api/qc/validate', (req, res) => {
+  const { type, distanceKm = 0, durationMinutes = 0, date } = req.body;
+  
+  if (!type) {
+    return res.status(400).json({ error: 'Activity type is required' });
+  }
+  
+  const qcResult = validateActivity({ type, distanceKm, durationMinutes, date });
+  res.json(qcResult);
 });
 
 /**********************
