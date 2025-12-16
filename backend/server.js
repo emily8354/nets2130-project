@@ -467,7 +467,7 @@ app.post('/api/profiles/upsert', async (req, res) => {
 /**********************
  * Activity workflow
  **********************/
-app.post('/activities', async (req, res) => {
+app.post('/api/activities', async (req, res) => {
   // Accept either username (legacy) or user_id (supabase) in body
   const { username, user_id, type, distanceKm = 0, durationMinutes = 0, date = getToday() } = req.body;
   
@@ -854,7 +854,7 @@ app.post('/api/activities/import-strava', async (req, res) => {
   }
 });
 
-app.get('/activities/:identifier', async (req, res) => {
+app.get('/api/activities/:identifier', async (req, res) => {
   const identifier = req.params.identifier;
   
   // If Supabase is configured, fetch from database

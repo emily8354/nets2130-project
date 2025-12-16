@@ -59,9 +59,16 @@ function LogActivityModal({ user, isOpen, onClose, onLogged }) {
         body: JSON.stringify(payloadBody),
       });
 
-      const payload = await response.json();
-
       if (!response.ok) {
+        let payload;
+        try {
+          payload = await response.json();
+        } catch (e) {
+          setError(`Server error (${response.status}): ${response.statusText}`);
+          setLoading(false);
+          return;
+        }
+        
         // Handle QC validation errors
         if (payload.error === 'Activity validation failed' && payload.details) {
           setError(payload.details.join('. '));
@@ -75,6 +82,8 @@ function LogActivityModal({ user, isOpen, onClose, onLogged }) {
         setLoading(false);
         return;
       }
+
+      const payload = await response.json();
 
       // Check for QC warnings even if accepted
       if (payload.qc && payload.qc.warnings && payload.qc.warnings.length > 0) {
