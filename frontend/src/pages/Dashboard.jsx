@@ -350,12 +350,14 @@ export default function Dashboard({ user, unit, onConnectionChange, activityRefr
   const [teamMembers, setTeamMembers] = useState([]);
   const [currentStreak, setCurrentStreak] = useState(user.streak || 0);
   const [userPoints, setUserPoints] = useState(user.points || 0);
+  const [weekDistance, setWeekDistance] = useState(0);
+  const [badgeCount, setBadgeCount] = useState(0);
 
-  // Calculate quick stats (dummy data for now - can be enhanced with real data)
+  // Calculate quick stats from actual data
   const quickStats = {
-    weekDistance: '12 km', // This would come from actual activity data
+    weekDistance: weekDistance > 0 ? `${weekDistance.toFixed(1)} ${unit === 'mi' ? 'mi' : 'km'}` : '0 km',
     currentStreak: currentStreak,
-    badges: 4, // This would be calculated from earned badges
+    badges: badgeCount,
   };
 
   // Fetch current user's streak and points from database
@@ -385,6 +387,59 @@ export default function Dashboard({ user, unit, onConnectionChange, activityRefr
 
     fetchUserProfile();
   }, [user, activityRefreshTrigger]);
+
+  // Fetch activities to calculate week distance
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchActivitiesForStats = async () => {
+      try {
+        const userId = user.id || user.username;
+        const response = await fetch(`${API_BASE}/api/activities/${encodeURIComponent(userId)}`);
+        
+        if (response.ok) {
+          const activities = await response.json();
+          
+          // Calculate week distance (last 7 days)
+          const now = new Date();
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const weekActivities = activities.filter(activity => {
+            const activityDate = new Date(activity.date);
+            return activityDate >= weekAgo;
+          });
+          
+          const totalDistanceKm = weekActivities.reduce((sum, activity) => {
+            return sum + (activity.distanceKm || 0);
+          }, 0);
+          
+          // Convert to miles if needed
+          const distance = unit === 'mi' ? totalDistanceKm / 1.60934 : totalDistanceKm;
+          setWeekDistance(distance);
+        }
+      } catch (error) {
+        console.error('Error fetching activities for stats:', error);
+      }
+    };
+
+    fetchActivitiesForStats();
+  }, [user, unit, activityRefreshTrigger]);
+
+  // Calculate badge count whenever streak or points change
+  useEffect(() => {
+    const streakBadges = [
+      { days: 3 }, { days: 7 }, { days: 14 }, { days: 30 }, { days: 60 }, { days: 100 }
+    ];
+    const pointBadges = [
+      { points: 100 }, { points: 500 }, { points: 1000 }, { points: 2500 }, { points: 5000 }
+    ];
+    
+    const userStreak = currentStreak || user?.streak || 0;
+    const userPointsValue = userPoints || user?.points || 0;
+    
+    const earnedStreakBadges = streakBadges.filter(badge => userStreak >= badge.days).length;
+    const earnedPointBadges = pointBadges.filter(badge => userPointsValue >= badge.points).length;
+    setBadgeCount(earnedStreakBadges + earnedPointBadges);
+  }, [currentStreak, userPoints, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -425,7 +480,7 @@ export default function Dashboard({ user, unit, onConnectionChange, activityRefr
         </h2>
         <div className="quick-stats">
           <div className="stat-pill">
-            Points: {user?.points ?? 0} pts
+            Points: {userPoints || user?.points || 0} pts
           </div>
           <div className="stat-pill">
             Current streak: {quickStats.currentStreak} days

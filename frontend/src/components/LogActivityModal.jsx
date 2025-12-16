@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
 import { API_BASE } from '../config/api';
+import { supabase } from '../supabaseClient';
 
 const defaultActivity = { type: 'run', title: '', date: '', time: '', distance: 5, distanceUnit: 'km', distanceKm: 5, durationMinutes: 30 };
 
@@ -53,15 +53,22 @@ function LogActivityModal({ user, isOpen, onClose, onLogged }) {
         time: activity.time,
       };
 
-      const response = await fetch(`${API_BASE}/activities`, {
+      const response = await fetch(`${API_BASE}/api/activities`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payloadBody),
       });
 
-      const payload = await response.json();
-
       if (!response.ok) {
+        let payload;
+        try {
+          payload = await response.json();
+        } catch (e) {
+          setError(`Server error (${response.status}): ${response.statusText}`);
+          setLoading(false);
+          return;
+        }
+        
         // Handle QC validation errors
         if (payload.error === 'Activity validation failed' && payload.details) {
           setError(payload.details.join('. '));
@@ -75,6 +82,8 @@ function LogActivityModal({ user, isOpen, onClose, onLogged }) {
         setLoading(false);
         return;
       }
+
+      const payload = await response.json();
 
       // Check for QC warnings even if accepted
       if (payload.qc && payload.qc.warnings && payload.qc.warnings.length > 0) {
