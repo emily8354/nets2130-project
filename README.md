@@ -1,11 +1,23 @@
-### Project Kinnect 
+# Kinnect
 
-Our final deliverable will be the live, deployed “Kinnect” web app. This MVP will be focused and functional, limited to its four core, must-have features: 1) user account creation/ID, 2) a simple manual activity logging form, 3) team assignment/selection, and 4) a basic, list-based leaderboard. It will include the real-world results from our live user test. 
+A simple fitness and social app with profiles, friends, teams, activities, streaks, and Strava integration.
 
-More complex features for final product:
-- Weekly individual challenges
-- Team matchups / bracket
-- Reminder emails to complete challenges
-- Set personal goals
+## Live Site
+https://nets2130.vercel.app
 
-We will present the data and key insights we collected from our users, as this is the ultimate proof that our incentive model works. This all gets wrapped up in a concise final presentation where we will demo the live app, show our data graphs (e.g., user engagement over time, team comparisons), and provide an honest analysis of what worked, what failed, and what the clear, data-driven next steps would be.
+## Dashboard Preview
+<img width="1429" height="692" alt="Screenshot 2025-12-23 at 5 15 30 PM" src="https://github.com/user-attachments/assets/41886fa1-ee1d-472d-a4ee-42252fb9c2b4" />
+
+## Features
+- User authentication (email, Google)
+- Profiles with city, team, units, badges, streaks
+- Friends: search, send requests, accept/decline
+- Teams: view your teams
+- Activities: map, points, streaks
+- Strava connect/disconnect
+
+## Tech Stack
+- Frontend: React + Vite
+- Backend: Node.js + Express
+- Database: Supabase (Postgres)
+- Deployment: Vercel
