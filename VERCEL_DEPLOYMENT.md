@@ -37,10 +37,10 @@ git push origin main
    
    **Required Variables:**
    ```
-   VITE_API_BASE=https://your-project.vercel.app
+   VITE_API_BASE=https://nets2130.vercel.app
    STRAVA_CLIENT_ID=186057
    STRAVA_CLIENT_SECRET=your_strava_client_secret
-   STRAVA_REDIRECT_URI=https://your-project.vercel.app/api/strava/callback
+   STRAVA_REDIRECT_URI=https://nets2130.vercel.app/api/strava/callback
    ENCRYPTION_KEY=your_64_character_hex_key
    SUPABASE_URL=your_supabase_url
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
@@ -74,12 +74,12 @@ vercel --prod
 After deployment, update your Strava app settings:
 
 1. Go to [Strava API Settings](https://www.strava.com/settings/api)
-2. Update **Authorization Callback Domain** to: `your-project.vercel.app`
-3. Update **Redirect URI** to: `https://your-project.vercel.app/api/strava/callback`
+2. Update **Authorization Callback Domain** to: `nets2130.vercel.app`
+3. Update **Redirect URI** to: `https://nets2130.vercel.app/api/strava/callback`
 
 ## Step 4: Verify Deployment
 
-1. Visit your deployed URL: `https://your-project.vercel.app`
+1. Visit your deployed URL: `https://nets2130.vercel.app`
 2. Test the following:
    - User signup/login
    - Profile creation

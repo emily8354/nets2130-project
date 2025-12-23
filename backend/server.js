@@ -1058,7 +1058,7 @@ app.get('/api/strava/auth', (req, res) => {
   }
 
   // Note: Callback must go to backend, not frontend, since backend exchanges code for tokens
-  const redirectUri = encodeURIComponent(process.env.STRAVA_REDIRECT_URI || 'http://localhost:4000/api/strava/callback');
+  const redirectUri = encodeURIComponent(process.env.STRAVA_REDIRECT_URI || 'https://nets2130.vercel.app/api/strava/callback');
   const scope = 'read,activity:read_all';
   const authUrl = `https://www.strava.com/oauth/authorize?client_id=${process.env.STRAVA_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
 
@@ -1071,17 +1071,17 @@ app.get('/api/strava/callback', async (req, res) => {
   const { code, state, error } = req.query;
 
   if (error) {
-    return res.redirect(`http://localhost:5173?strava_error=${encodeURIComponent(error)}`);
+    return res.redirect(`https://nets2130.vercel.app?strava_error=${encodeURIComponent(error)}`);
   }
 
   if (!code || !state) {
-    return res.redirect(`http://localhost:5173?strava_error=${encodeURIComponent('Missing authorization code or state')}`);
+    return res.redirect(`https://nets2130.vercel.app?strava_error=${encodeURIComponent('Missing authorization code or state')}`);
   }
 
   // Validate state to prevent CSRF
   const stateData = oauthStates.get(state);
   if (!stateData) {
-    return res.redirect(`http://localhost:5173?strava_error=${encodeURIComponent('Invalid state parameter')}`);
+    return res.redirect(`https://nets2130.vercel.app?strava_error=${encodeURIComponent('Invalid state parameter')}`);
   }
 
   oauthStates.delete(state); // Use state only once
@@ -1214,7 +1214,7 @@ app.get('/api/strava/callback', async (req, res) => {
     }
 
     // Redirect to frontend with success. If we have a username include it for client UX.
-    const redirectBase = 'http://localhost:5173';
+    const redirectBase = 'https://nets2130.vercel.app';
     const params = new URLSearchParams({ strava_success: 'true' });
     if (stateData.username) params.set('username', stateData.username);
     if (stateData.userId) params.set('supaUserId', stateData.userId);
@@ -1235,7 +1235,7 @@ app.get('/api/strava/callback', async (req, res) => {
     res.redirect(`${redirectBase}?${params.toString()}`);
   } catch (error) {
     console.error('Strava callback error:', error);
-    res.redirect(`http://localhost:5173?strava_error=${encodeURIComponent(error.message)}`);
+    res.redirect(`https://nets2130.vercel.app?strava_error=${encodeURIComponent(error.message)}`);
   }
 });
 
