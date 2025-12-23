@@ -16,6 +16,7 @@ const {
   isTokenExpired,
   stravaApiRequest
 } = require('./strava-utils');
+const { validateActivity, getQCStats } = require('./quality-control');
 
 // Supabase client (server-side, service role)
 let supabase;
@@ -76,6 +77,41 @@ const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toSt
 const generateId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 
 const getToday = () => new Date().toISOString().slice(0, 10);
+
+// Helper function to calculate streak based on last activity date and new activity date
+function calculateStreak(lastActivityDate, newActivityDate, currentStreak = 0) {
+  if (!lastActivityDate) {
+    // First activity ever - start streak at 1
+    return 1;
+  }
+  
+  if (lastActivityDate === newActivityDate) {
+    // Already logged on this date, streak unchanged
+    return currentStreak;
+  }
+  
+  // Parse dates and calculate difference in days
+  const lastDate = new Date(lastActivityDate + 'T00:00:00');
+  const newDate = new Date(newActivityDate + 'T00:00:00');
+  const diffDays = Math.floor((newDate - lastDate) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 1) {
+    // Consecutive day - increment streak
+    return currentStreak + 1;
+  } else if (diffDays > 1) {
+    // Gap in days - reset streak to 1
+    return 1;
+  } else {
+    // New activity date is before last activity date (shouldn't happen normally, but handle gracefully)
+    // Check if it's exactly 1 day before (backdating)
+    if (diffDays === -1) {
+      // This is a backdated activity from yesterday - don't change streak
+      return currentStreak;
+    }
+    // Otherwise, reset to 1
+    return 1;
+  }
+}
 
 // Helper function to get city coordinates
 function getCityCoordinates(city) {
@@ -431,7 +467,7 @@ app.post('/api/profiles/upsert', async (req, res) => {
 /**********************
  * Activity workflow
  **********************/
-app.post('/activities', async (req, res) => {
+app.post('/api/activities', async (req, res) => {
   // Accept either username (legacy) or user_id (supabase) in body
   const { username, user_id, type, distanceKm = 0, durationMinutes = 0, date = getToday() } = req.body;
   
@@ -445,12 +481,33 @@ app.post('/activities', async (req, res) => {
       const user = await getSupabaseUserFromToken(token);
       if (!user) return res.status(401).json({ error: 'Invalid token' });
       
+      // Quality Control validation
+      const qcResult = validateActivity({ type, distanceKm, durationMinutes, date });
+      
+      if (!qcResult.valid) {
+        console.log(`[QC] Activity rejected for user ${user.id}:`, qcResult.errors);
+        return res.status(400).json({
+          error: 'Activity validation failed',
+          details: qcResult.errors,
+          warnings: qcResult.warnings,
+          qc_metrics: qcResult.metrics
+        });
+      }
+      
+      // Log warnings if any (but still accept the activity)
+      if (qcResult.warnings.length > 0) {
+        console.log(`[QC] Activity warnings for user ${user.id}:`, qcResult.warnings);
+      }
+      
       const activity = {
         user_id: user.id,
         type,
         distance_km: distanceKm,
         duration_minutes: durationMinutes,
         date,
+        qc_status: 'accepted',
+        qc_warnings: qcResult.warnings.length > 0 ? qcResult.warnings : null,
+        qc_metrics: qcResult.metrics
       };
       const points = calculatePoints({ type, distanceKm, durationMinutes });
       activity.points_earned = points;
@@ -472,15 +529,7 @@ app.post('/activities', async (req, res) => {
       // Update user's points and streak in profile
       const { data: profile } = await supabase.from('profiles').select('points, streak, last_activity_date').eq('id', user.id).single();
       if (profile) {
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        let newStreak = profile.streak || 0;
-        if (profile.last_activity_date === date) {
-          // Already logged today, streak unchanged
-        } else if (profile.last_activity_date === yesterday) {
-          newStreak += 1;
-        } else {
-          newStreak = 1;
-        }
+        const newStreak = calculateStreak(profile.last_activity_date, date, profile.streak || 0);
         
         await supabase.from('profiles').update({
           points: (profile.points || 0) + points,
@@ -499,6 +548,11 @@ app.post('/activities', async (req, res) => {
           durationMinutes: savedActivity.duration_minutes,
           pointsEarned: savedActivity.points_earned,
           date: savedActivity.date
+        },
+        qc: {
+          status: 'accepted',
+          warnings: qcResult.warnings,
+          metrics: qcResult.metrics
         }
       });
     } catch (err) {
@@ -511,6 +565,24 @@ app.post('/activities', async (req, res) => {
   const actor = user_id || username;
   if (!actor) return res.status(400).json({ error: 'username or user_id required' });
 
+  // Quality Control validation
+  const qcResult = validateActivity({ type, distanceKm, durationMinutes, date });
+  
+  if (!qcResult.valid) {
+    console.log(`[QC] Activity rejected for ${actor}:`, qcResult.errors);
+    return res.status(400).json({
+      error: 'Activity validation failed',
+      details: qcResult.errors,
+      warnings: qcResult.warnings,
+      qc_metrics: qcResult.metrics
+    });
+  }
+  
+  // Log warnings if any (but still accept the activity)
+  if (qcResult.warnings.length > 0) {
+    console.log(`[QC] Activity warnings for ${actor}:`, qcResult.warnings);
+  }
+
   const activity = {
     id: generateId('act'),
     user_id: user_id || null,
@@ -519,12 +591,23 @@ app.post('/activities', async (req, res) => {
     distanceKm,
     durationMinutes,
     date,
+    qc_status: 'accepted',
+    qc_warnings: qcResult.warnings.length > 0 ? qcResult.warnings : null,
+    qc_metrics: qcResult.metrics
   };
   const points = calculatePoints(activity);
   activity.pointsEarned = points;
 
   activities.push(activity);
-  res.json({ message: 'Activity logged', activity });
+  res.json({ 
+    message: 'Activity logged', 
+    activity,
+    qc: {
+      status: 'accepted',
+      warnings: qcResult.warnings,
+      metrics: qcResult.metrics
+    }
+  });
 });
 
 // Import Strava activity/activities to user's activities
@@ -657,6 +740,28 @@ app.post('/api/activities/import-strava', async (req, res) => {
           continue;
         }
 
+        // Quality Control validation
+        const qcResult = validateActivity({ 
+          type: activityType, 
+          distanceKm, 
+          durationMinutes, 
+          date: activityDate 
+        });
+        
+        if (!qcResult.valid) {
+          console.log(`[IMPORT] Activity ${stravaActivity.id} rejected by QC:`, qcResult.errors);
+          skipped.push({ 
+            id: stravaActivity.id, 
+            reason: `QC validation failed: ${qcResult.errors.join(', ')}` 
+          });
+          continue;
+        }
+        
+        // Log warnings if any (but still accept the activity)
+        if (qcResult.warnings.length > 0) {
+          console.log(`[IMPORT] Activity ${stravaActivity.id} QC warnings:`, qcResult.warnings);
+        }
+
         // Create activity
         const activity = {
           user_id: userId,
@@ -665,6 +770,9 @@ app.post('/api/activities/import-strava', async (req, res) => {
           duration_minutes: durationMinutes,
           date: activityDate,
           strava_activity_id: stravaActivity.id, // Store Strava ID to track imported activities
+          qc_status: 'accepted',
+          qc_warnings: qcResult.warnings.length > 0 ? qcResult.warnings : null,
+          qc_metrics: qcResult.metrics
         };
         const points = calculatePoints({ type: activityType, distanceKm, durationMinutes });
         activity.points_earned = points;
@@ -710,26 +818,9 @@ app.post('/api/activities/import-strava', async (req, res) => {
         // Find the most recent activity date from imported activities
         const activityDates = imported.map(a => a.date).sort().reverse();
         const mostRecentDate = activityDates[0];
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
         
-        let newStreak = profile.streak || 0;
-        // Update streak based on most recent activity
-        if (profile.last_activity_date === mostRecentDate) {
-          // Already logged on this date, streak unchanged
-        } else if (profile.last_activity_date === yesterday) {
-          newStreak += 1;
-        } else {
-          // Check if activities are consecutive days
-          const lastDate = profile.last_activity_date ? new Date(profile.last_activity_date) : null;
-          const newDate = new Date(mostRecentDate);
-          if (lastDate && (newDate - lastDate) === 86400000) {
-            // Consecutive day
-            newStreak += 1;
-          } else {
-            // Not consecutive, reset to 1
-            newStreak = 1;
-          }
-        }
+        // Calculate new streak based on most recent activity date
+        const newStreak = calculateStreak(profile.last_activity_date, mostRecentDate, profile.streak || 0);
         
         // Update points and streak
         const { error: updateError } = await supabase.from('profiles').update({
@@ -763,7 +854,7 @@ app.post('/api/activities/import-strava', async (req, res) => {
   }
 });
 
-app.get('/activities/:identifier', async (req, res) => {
+app.get('/api/activities/:identifier', async (req, res) => {
   const identifier = req.params.identifier;
   
   // If Supabase is configured, fetch from database
@@ -2172,6 +2263,33 @@ app.delete('/api/teams/:team_id', async (req, res) => {
     console.error('Error deleting team', err);
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+/**********************
+ * Quality Control endpoints
+ **********************/
+
+// GET /api/qc/stats - Get QC rules and statistics
+app.get('/api/qc/stats', (req, res) => {
+  try {
+    const stats = getQCStats();
+    res.json(stats);
+  } catch (err) {
+    console.error('Error fetching QC stats:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /api/qc/validate - Validate an activity without saving it
+app.post('/api/qc/validate', (req, res) => {
+  const { type, distanceKm = 0, durationMinutes = 0, date } = req.body;
+  
+  if (!type) {
+    return res.status(400).json({ error: 'Activity type is required' });
+  }
+  
+  const qcResult = validateActivity({ type, distanceKm, durationMinutes, date });
+  res.json(qcResult);
 });
 
 /**********************

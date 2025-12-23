@@ -27,7 +27,7 @@ function LoggedActivities({ user, unit = 'km', refreshTrigger }) {
     try {
       // Use user ID (UUID) to fetch activities - backend expects user_id
       const userId = user.id || user.username;
-      const response = await fetch(`${API_BASE}/activities/${encodeURIComponent(userId)}`);
+      const response = await fetch(`${API_BASE}/api/activities/${encodeURIComponent(userId)}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch activities');
